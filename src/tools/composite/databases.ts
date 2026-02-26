@@ -552,10 +552,7 @@ async function updateDatabaseContainer(notion: Client, input: DatabasesInput): P
 
   if (input.cover) {
     if (!isSafeUrl(input.cover)) {
-      throw new NotionMCPError(
-        'Invalid cover URL. Only http/https/mailto/tel URLs are allowed.',
-        'VALIDATION_ERROR'
-      )
+      throw new NotionMCPError('Invalid cover URL. Only http/https/mailto/tel URLs are allowed.', 'VALIDATION_ERROR')
     }
     updates.cover = { type: 'external', external: { url: input.cover } }
   }

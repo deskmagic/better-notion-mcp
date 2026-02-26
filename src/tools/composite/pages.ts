@@ -114,10 +114,7 @@ async function createPage(notion: Client, input: PagesInput): Promise<any> {
   if (input.icon) pageData.icon = { type: 'emoji', emoji: input.icon }
   if (input.cover) {
     if (!isSafeUrl(input.cover)) {
-      throw new NotionMCPError(
-        'Invalid cover URL. Only http/https/mailto/tel URLs are allowed.',
-        'VALIDATION_ERROR'
-      )
+      throw new NotionMCPError('Invalid cover URL. Only http/https/mailto/tel URLs are allowed.', 'VALIDATION_ERROR')
     }
     pageData.cover = { type: 'external', external: { url: input.cover } }
   }
@@ -322,10 +319,7 @@ async function updatePage(notion: Client, input: PagesInput): Promise<any> {
   if (input.icon) updates.icon = { type: 'emoji', emoji: input.icon }
   if (input.cover) {
     if (!isSafeUrl(input.cover)) {
-      throw new NotionMCPError(
-        'Invalid cover URL. Only http/https/mailto/tel URLs are allowed.',
-        'VALIDATION_ERROR'
-      )
+      throw new NotionMCPError('Invalid cover URL. Only http/https/mailto/tel URLs are allowed.', 'VALIDATION_ERROR')
     }
     updates.cover = { type: 'external', external: { url: input.cover } }
   }
