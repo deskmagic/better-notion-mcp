@@ -51,8 +51,8 @@ export function convertToNotionProperties(
       converted[key] = { checkbox: value }
     } else if (Array.isArray(value)) {
       // Could be multi_select, relation, people, files
-      if (value.length > 0 && typeof value[0] === 'string') {
-        // Assume multi_select
+      // Only assume multi_select if all elements are strings
+      if (value.length > 0 && value.every((v) => typeof v === 'string')) {
         converted[key] = {
           multi_select: value.map((v) => ({ name: v }))
         }
