@@ -6,6 +6,8 @@
  *           equations, columns, table of contents, breadcrumb
  */
 
+import { isSafeUrl } from './security.js'
+
 export interface NotionBlock {
   object: 'block'
   type: string
@@ -106,8 +108,12 @@ export function markdownToBlocks(markdown: string): NotionBlock[] {
     // Image ![alt](url)
     const imageMatch = line.match(/^!\[([^\]]*)\]\(([^)]+)\)$/)
     if (imageMatch) {
-      blocks.push(createImage(imageMatch[2], imageMatch[1]))
-      continue
+      const url = imageMatch[2]
+      if (isSafeUrl(url)) {
+        blocks.push(createImage(url, imageMatch[1]))
+        continue
+      }
+      // If unsafe URL, render as plain paragraph to avoid XSS
     }
 
     // Bookmark/Embed [bookmark](url) or [embed](url)
@@ -115,12 +121,15 @@ export function markdownToBlocks(markdown: string): NotionBlock[] {
     if (bookmarkMatch) {
       const type = bookmarkMatch[1].toLowerCase()
       const url = bookmarkMatch[2]
-      if (type === 'embed') {
-        blocks.push(createEmbed(url))
-      } else {
-        blocks.push(createBookmark(url))
+      if (isSafeUrl(url)) {
+        if (type === 'embed') {
+          blocks.push(createEmbed(url))
+        } else {
+          blocks.push(createBookmark(url))
+        }
+        continue
       }
-      continue
+      // If unsafe URL, render as plain paragraph
     }
 
     // Toggle <details><summary>Title</summary>
@@ -363,9 +372,11 @@ export function parseRichText(text: string): RichText[] {
           const linkText = text.slice(i + 1, closeBracket)
           const linkUrl = text.slice(closeBracket + 2, closeParen)
 
+          const isSafe = isSafeUrl(linkUrl)
+
           richText.push({
             type: 'text',
-            text: { content: linkText, link: { url: linkUrl } },
+            text: { content: linkText, link: isSafe ? { url: linkUrl } : null },
             annotations: {
               bold,
               italic,

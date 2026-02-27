@@ -20,3 +20,23 @@ export function wrapToolResult(toolName: string, jsonText: string): string {
 
   return `<untrusted_notion_content>\n${jsonText}\n</untrusted_notion_content>\n\n${SAFETY_WARNING}`
 }
+
+/**
+ * Validates a URL to ensure it uses a safe protocol.
+ * Prevents XSS attacks via javascript:, data:, vbscript:, etc.
+ */
+export function isSafeUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    return ['http:', 'https:', 'mailto:', 'tel:'].includes(parsed.protocol)
+  } catch {
+    // If URL parsing fails, it might be a relative path or an invalid URL
+    // For relative paths like "/foo" or "foo", they are generally safe,
+    // but we can reject strictly for now, or check for dangerous prefixes.
+    const lowerUrl = url.toLowerCase().trim()
+    if (lowerUrl.startsWith('javascript:') || lowerUrl.startsWith('data:') || lowerUrl.startsWith('vbscript:')) {
+      return false
+    }
+    return true
+  }
+}
