@@ -65,14 +65,38 @@ export async function processBatches<T, R>(
   options: { batchSize?: number; concurrency?: number } = {}
 ): Promise<R[]> {
   const { batchSize = 10, concurrency = 3 } = options
-  const batches = batchItems(items, batchSize)
-  const results: R[] = []
 
-  for (let i = 0; i < batches.length; i += concurrency) {
-    const currentBatches = batches.slice(i, i + concurrency)
-    const batchPromises = currentBatches.map((batch) => Promise.all(batch.map(processFn)))
-    const batchResults = await Promise.all(batchPromises)
-    results.push(...batchResults.flat())
+  // Pre-allocate the results array to avoid resizing during pushes
+  const results: R[] = new Array(items.length)
+  let resultIndex = 0
+
+  // Iterate over items directly, creating batches dynamically without intermediate array allocations
+  for (let i = 0; i < items.length; i += batchSize * concurrency) {
+    const batchPromises = []
+
+    // Create concurrent batches
+    for (let c = 0; c < concurrency; c++) {
+      const startIndex = i + c * batchSize
+      if (startIndex >= items.length) break
+      const endIndex = Math.min(startIndex + batchSize, items.length)
+
+      // Pre-allocate chunk promises to avoid map/push overhead
+      const chunkPromises = new Array(endIndex - startIndex)
+      for (let k = startIndex; k < endIndex; k++) {
+        chunkPromises[k - startIndex] = processFn(items[k])
+      }
+      batchPromises.push(Promise.all(chunkPromises))
+    }
+
+    const chunkResults = await Promise.all(batchPromises)
+
+    // Unpack results into the pre-allocated results array
+    for (let c = 0; c < chunkResults.length; c++) {
+      const chunk = chunkResults[c]
+      for (let k = 0; k < chunk.length; k++) {
+        results[resultIndex++] = chunk[k]
+      }
+    }
   }
 
   return results
