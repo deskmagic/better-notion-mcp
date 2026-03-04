@@ -58,6 +58,7 @@ export function batchItems<T>(items: T[], batchSize: number): T[][] {
 
 /**
  * Process items in batches with concurrency limit
+ * Optimized to avoid intermediate array allocations (.slice, .map, .flat)
  */
 export async function processBatches<T, R>(
   items: T[],
@@ -65,14 +66,35 @@ export async function processBatches<T, R>(
   options: { batchSize?: number; concurrency?: number } = {}
 ): Promise<R[]> {
   const { batchSize = 10, concurrency = 3 } = options
-  const batches = batchItems(items, batchSize)
-  const results: R[] = []
+  const results: R[] = new Array(items.length)
+  let resultIndex = 0
 
-  for (let i = 0; i < batches.length; i += concurrency) {
-    const currentBatches = batches.slice(i, i + concurrency)
-    const batchPromises = currentBatches.map((batch) => Promise.all(batch.map(processFn)))
+  const itemsLength = items.length
+  for (let i = 0; i < itemsLength; i += batchSize * concurrency) {
+    const endConcurrent = Math.min(i + batchSize * concurrency, itemsLength)
+    const currentBatchesCount = Math.ceil((endConcurrent - i) / batchSize)
+
+    const batchPromises = new Array(currentBatchesCount)
+    for (let j = 0; j < currentBatchesCount; j++) {
+      const batchStart = i + j * batchSize
+      const batchEnd = Math.min(batchStart + batchSize, itemsLength)
+      const batchLength = batchEnd - batchStart
+
+      const itemPromises = new Array(batchLength)
+      for (let k = 0; k < batchLength; k++) {
+        itemPromises[k] = processFn(items[batchStart + k])
+      }
+      batchPromises[j] = Promise.all(itemPromises)
+    }
+
     const batchResults = await Promise.all(batchPromises)
-    results.push(...batchResults.flat())
+
+    for (let j = 0; j < batchResults.length; j++) {
+      const batchResult = batchResults[j]
+      for (let k = 0; k < batchResult.length; k++) {
+        results[resultIndex++] = batchResult[k]
+      }
+    }
   }
 
   return results
