@@ -378,15 +378,13 @@ async function queryDatabase(notion: Client, input: DatabasesInput): Promise<Que
   const results = input.limit ? allResults.slice(0, input.limit) : allResults
 
   // Format results
-  // Optimization: Use pre-allocated array and for loop instead of map
-  const formattedResults = new Array(results.length)
-  for (let i = 0; i < results.length; i++) {
-    const page = results[i] as any
+  const formattedResults = results.map((page: any) => {
     const props = extractPageProperties(page.properties)
     props.page_id = page.id
     props.url = page.url
-    formattedResults[i] = props
-  }
+
+    return props
+  })
 
   return {
     action: 'query',
