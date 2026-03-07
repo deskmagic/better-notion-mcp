@@ -91,7 +91,11 @@ const TOOLS = [
           description:
             'Icon: emoji (e.g. "📋"), external URL (https://...), or built-in shorthand (name:color, e.g. "document:gray")'
         },
-        cover: { type: 'string', description: 'Cover image URL' },
+        cover: {
+          type: 'string',
+          description:
+            'Cover image: URL or built-in shorthand (gradient_1..11, solid_red/yellow/blue/beige, nasa_*, met_*, rijksmuseum_*, woodcuts_*)'
+        },
         archived: { type: 'boolean', description: 'Archive status' }
       },
       required: ['action']
@@ -137,9 +141,13 @@ const TOOLS = [
         icon: {
           type: 'string',
           description:
-            'Icon: emoji (e.g. "📋"), external URL (https://...), or built-in shorthand (name:color, e.g. "document:gray") (for update_database)'
+            'Icon (for update_database): emoji (e.g. "📋"), external URL (https://...), or built-in shorthand (name:color, e.g. "document:gray")'
         },
-        cover: { type: 'string', description: 'Cover image URL (for update_database)' },
+        cover: {
+          type: 'string',
+          description:
+            'Cover image (for update_database): URL or built-in shorthand (gradient_1..11, solid_red/yellow/blue/beige, nasa_*, met_*, rijksmuseum_*, woodcuts_*)'
+        },
         filters: { type: 'object', description: 'Query filters (for query action)' },
         sorts: { type: 'array', items: { type: 'object' }, description: 'Query sorts' },
         limit: { type: 'number', description: 'Max query results' },
