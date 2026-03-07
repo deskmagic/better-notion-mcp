@@ -206,6 +206,83 @@ describe('convertToNotionProperties', () => {
     })
   })
 
+  describe('relation values with schema', () => {
+    it('converts a single page ID string to relation format', () => {
+      const result = convertToNotionProperties({ Parent: 'abc123def456' }, { Parent: 'relation' })
+      expect(result).toEqual({
+        Parent: { relation: [{ id: 'abc123def456' }] }
+      })
+    })
+
+    it('converts a Notion URL string to relation format (extracts page ID)', () => {
+      const result = convertToNotionProperties(
+        { Parent: 'https://www.notion.so/My-Page-abc123def456abc123def456abc123de' },
+        { Parent: 'relation' }
+      )
+      expect(result).toEqual({
+        Parent: { relation: [{ id: 'abc123de-f456-abc1-23de-f456abc123de' }] }
+      })
+    })
+
+    it('converts a Notion URL with query params to relation format', () => {
+      const result = convertToNotionProperties(
+        { Parent: 'https://www.notion.so/abc123def456abc123def456abc123de?v=xyz' },
+        { Parent: 'relation' }
+      )
+      expect(result).toEqual({
+        Parent: { relation: [{ id: 'abc123de-f456-abc1-23de-f456abc123de' }] }
+      })
+    })
+
+    it('converts an array of page ID strings to relation format', () => {
+      const result = convertToNotionProperties({ Related: ['abc-123', 'def-456'] }, { Related: 'relation' })
+      expect(result).toEqual({
+        Related: { relation: [{ id: 'abc-123' }, { id: 'def-456' }] }
+      })
+    })
+
+    it('converts an array of Notion URLs to relation format', () => {
+      const result = convertToNotionProperties(
+        {
+          Related: [
+            'https://www.notion.so/Page-A-abc123def456abc123def456abc123de',
+            'https://www.notion.so/Page-B-def456abc123def456abc123def456ab'
+          ]
+        },
+        { Related: 'relation' }
+      )
+      expect(result).toEqual({
+        Related: {
+          relation: [{ id: 'abc123de-f456-abc1-23de-f456abc123de' }, { id: 'def456ab-c123-def4-56ab-c123def456ab' }]
+        }
+      })
+    })
+
+    it('converts a JSON array string to relation format', () => {
+      const result = convertToNotionProperties({ Related: '["abc-123","def-456"]' }, { Related: 'relation' })
+      expect(result).toEqual({
+        Related: { relation: [{ id: 'abc-123' }, { id: 'def-456' }] }
+      })
+    })
+
+    it('converts a UUID-formatted page ID to relation format', () => {
+      const result = convertToNotionProperties(
+        { Parent: 'abc123de-f456-abc1-23de-f456abc123de' },
+        { Parent: 'relation' }
+      )
+      expect(result).toEqual({
+        Parent: { relation: [{ id: 'abc123de-f456-abc1-23de-f456abc123de' }] }
+      })
+    })
+
+    it('handles empty array for relation schema type', () => {
+      const result = convertToNotionProperties({ Related: [] }, { Related: 'relation' })
+      expect(result).toEqual({
+        Related: { relation: [] }
+      })
+    })
+  })
+
   describe('mixed properties with schema', () => {
     it('converts multiple property types in a single call', () => {
       const properties = {
@@ -216,13 +293,15 @@ describe('convertToNotionProperties', () => {
         Active: true,
         Tags: ['urgent', 'review'],
         Due: '2025-06-01',
+        Parent: 'page-id-123',
         Metadata: { custom: true },
         Notes: null
       }
       const schema: Record<string, string> = {
         Name: 'title',
         Description: 'rich_text',
-        Due: 'date'
+        Due: 'date',
+        Parent: 'relation'
       }
 
       const result = convertToNotionProperties(properties, schema)
@@ -235,6 +314,7 @@ describe('convertToNotionProperties', () => {
         Active: { checkbox: true },
         Tags: { multi_select: [{ name: 'urgent' }, { name: 'review' }] },
         Due: { date: { start: '2025-06-01' } },
+        Parent: { relation: [{ id: 'page-id-123' }] },
         Metadata: { custom: true },
         Notes: null
       })
