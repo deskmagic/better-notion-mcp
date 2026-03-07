@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { NotionMCPError } from './errors'
 import { formatIcon } from './icons'
 
 describe('formatIcon', () => {
@@ -59,6 +60,20 @@ describe('formatIcon', () => {
         type: 'external',
         external: { url: 'https://example.com/icon:blue.svg' }
       })
+    })
+  })
+
+  describe('unsafe URL rejection', () => {
+    it('rejects javascript: URLs', () => {
+      expect(() => formatIcon('javascript:alert(1)')).toThrow(NotionMCPError)
+    })
+
+    it('rejects data: URLs', () => {
+      expect(() => formatIcon('data:text/html,<script>alert(1)</script>')).toThrow(NotionMCPError)
+    })
+
+    it('rejects vbscript: URLs', () => {
+      expect(() => formatIcon('vbscript:msgbox(1)')).toThrow(NotionMCPError)
     })
   })
 })

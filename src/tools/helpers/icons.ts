@@ -3,6 +3,9 @@
  * Format icon values for the Notion API
  */
 
+import { NotionMCPError } from './errors.js'
+import { isSafeUrl } from './security.js'
+
 const NOTION_ICON_COLORS = new Set([
   'pink',
   'red',
@@ -34,6 +37,13 @@ function isNotionIconShorthand(value: string): boolean {
  */
 export function formatIcon(value: string): { type: string; [key: string]: any } {
   if (value.startsWith('http://') || value.startsWith('https://')) {
+    if (!isSafeUrl(value)) {
+      throw new NotionMCPError(
+        `Unsafe icon URL: "${value}". Use http: or https: URLs only.`,
+        'VALIDATION_ERROR',
+        'Provide a valid http: or https: URL for the icon'
+      )
+    }
     return { type: 'external', external: { url: value } }
   }
   if (isNotionIconShorthand(value)) {
@@ -41,6 +51,14 @@ export function formatIcon(value: string): { type: string; [key: string]: any } 
     const name = value.slice(0, colonIdx)
     const color = value.slice(colonIdx + 1)
     return { type: 'external', external: { url: `https://www.notion.so/icons/${name}_${color}.svg` } }
+  }
+  // Reject dangerous URL schemes before falling through to emoji
+  if (!isSafeUrl(value)) {
+    throw new NotionMCPError(
+      `Unsafe icon value: "${value}". Use an emoji, a valid URL, or a built-in shorthand (name:color).`,
+      'VALIDATION_ERROR',
+      'Provide an emoji, an http/https URL, or a Notion icon shorthand like "document:gray"'
+    )
   }
   return { type: 'emoji', emoji: value }
 }

@@ -3,6 +3,7 @@
  * Resolves shorthand names (e.g., "gradient_8", "solid_blue") to full Notion cover URLs
  */
 
+import { NotionMCPError } from './errors.js'
 import { isSafeUrl } from './security.js'
 
 const NOTION_COVER_BASE = 'https://www.notion.so/images/page-cover'
@@ -90,7 +91,11 @@ export function formatCover(value: string): { type: 'external'; external: { url:
   // Full URL (with safety check against javascript:, data:, etc.)
   if (value.startsWith('http://') || value.startsWith('https://')) {
     if (!isSafeUrl(value)) {
-      throw new Error(`Unsafe cover URL: "${value}". Use http: or https: URLs only.`)
+      throw new NotionMCPError(
+        `Unsafe cover URL: "${value}". Use http: or https: URLs only.`,
+        'VALIDATION_ERROR',
+        'Provide a valid http: or https: URL for the cover image'
+      )
     }
     return { type: 'external', external: { url: value } }
   }
@@ -102,7 +107,11 @@ export function formatCover(value: string): { type: 'external'; external: { url:
   }
 
   // Unknown shorthand - try as a direct notion cover path
-  throw new Error(`Unknown cover shorthand: "${value}". Use a URL or one of: ${Object.keys(COVER_CATALOG).join(', ')}`)
+  throw new NotionMCPError(
+    `Unknown cover shorthand: "${value}". Use a URL or one of: ${Object.keys(COVER_CATALOG).join(', ')}`,
+    'VALIDATION_ERROR',
+    'Provide a valid URL or a recognized cover shorthand name'
+  )
 }
 
 /** List all available cover shorthand names, grouped by category */
