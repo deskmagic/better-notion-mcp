@@ -339,6 +339,60 @@ describe('markdownToBlocks', () => {
       expect(dataCells[0][0].text.content).toBe('key')
       expect(dataCells[1][0].text.content).toBe('42')
     })
+
+    it('should parse bold text in table cells', () => {
+      const md = '| **Bold header** | Normal |\n| --- | --- |\n| **bold cell** | plain |'
+      const blocks = markdownToBlocks(md)
+      const headerCells = blocks[0].table.children[0].table_row.cells
+      expect(headerCells[0]).toHaveLength(1)
+      expect(headerCells[0][0].text.content).toBe('Bold header')
+      expect(headerCells[0][0].annotations.bold).toBe(true)
+      const dataCells = blocks[0].table.children[1].table_row.cells
+      expect(dataCells[0][0].text.content).toBe('bold cell')
+      expect(dataCells[0][0].annotations.bold).toBe(true)
+      expect(dataCells[1][0].annotations.bold).toBe(false)
+    })
+
+    it('should parse italic text in table cells', () => {
+      const md = '| *italic* | normal |\n| --- | --- |\n| *em* | plain |'
+      const blocks = markdownToBlocks(md)
+      const headerCells = blocks[0].table.children[0].table_row.cells
+      expect(headerCells[0][0].text.content).toBe('italic')
+      expect(headerCells[0][0].annotations.italic).toBe(true)
+      const dataCells = blocks[0].table.children[1].table_row.cells
+      expect(dataCells[0][0].text.content).toBe('em')
+      expect(dataCells[0][0].annotations.italic).toBe(true)
+    })
+
+    it('should parse inline code in table cells', () => {
+      const md = '| Command | Description |\n| --- | --- |\n| `git status` | shows status |'
+      const blocks = markdownToBlocks(md)
+      const dataCells = blocks[0].table.children[1].table_row.cells
+      expect(dataCells[0][0].text.content).toBe('git status')
+      expect(dataCells[0][0].annotations.code).toBe(true)
+    })
+
+    it('should parse links in table cells', () => {
+      const md = '| Name | URL |\n| --- | --- |\n| [Google](https://google.com) | search |'
+      const blocks = markdownToBlocks(md)
+      const dataCells = blocks[0].table.children[1].table_row.cells
+      expect(dataCells[0][0].text.content).toBe('Google')
+      expect(dataCells[0][0].text.link).toEqual({ url: 'https://google.com' })
+    })
+
+    it('should parse mixed rich text in a single table cell', () => {
+      const md = '| Feature | Status |\n| --- | --- |\n| has **bold** and *italic* | done |'
+      const blocks = markdownToBlocks(md)
+      const dataCells = blocks[0].table.children[1].table_row.cells
+      const cellRichText = dataCells[0] as RichText[]
+      expect(cellRichText.length).toBeGreaterThan(1)
+      const boldPart = cellRichText.find((rt: RichText) => rt.annotations.bold)
+      expect(boldPart).toBeDefined()
+      expect(boldPart!.text.content).toBe('bold')
+      const italicPart = cellRichText.find((rt: RichText) => rt.annotations.italic)
+      expect(italicPart).toBeDefined()
+      expect(italicPart!.text.content).toBe('italic')
+    })
   })
 
   describe('images', () => {
