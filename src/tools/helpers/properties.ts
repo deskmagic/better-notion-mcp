@@ -6,6 +6,63 @@
 import * as RichText from './richtext.js'
 
 /**
+ * Extract a Notion page ID from a URL or pass through a raw ID.
+ * Handles formats:
+ * - Raw 32-char hex: "abc123def456abc123def456abc123de"
+ * - UUID with dashes: "abc123de-f456-abc1-23de-f456abc123de"
+ * - Notion URL: "https://www.notion.so/Page-Title-abc123def456abc123def456abc123de"
+ * - Notion URL with query params: "https://www.notion.so/abc123def456abc123def456abc123de?v=xyz"
+ */
+function extractPageId(value: string): string {
+  // If it looks like a Notion URL, extract the 32-char hex ID from the end of the path
+  if (value.startsWith('https://') || value.startsWith('http://')) {
+    const url = new URL(value)
+    const path = url.pathname
+    // The page ID is the last 32 hex chars in the path (possibly preceded by a dash after the title)
+    const match = path.match(/([a-f0-9]{32})$/i)
+    if (match) {
+      const hex = match[1]
+      // Format as UUID: 8-4-4-4-12
+      return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+    }
+  }
+  // Already a page ID (with or without dashes)
+  return value
+}
+
+/**
+ * Convert a string or array value to Notion relation format.
+ * Accepts page IDs, Notion URLs, or JSON array strings.
+ */
+function convertToRelation(value: string | string[]): { relation: { id: string }[] } {
+  if (typeof value === 'string') {
+    // Try parsing as JSON array first (e.g. '["id1","id2"]')
+    if (value.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(value)
+        if (Array.isArray(parsed)) {
+          const relation = new Array(parsed.length)
+          for (let i = 0; i < parsed.length; i++) {
+            relation[i] = { id: extractPageId(String(parsed[i])) }
+          }
+          return { relation }
+        }
+      } catch {
+        // Not valid JSON, treat as single ID
+      }
+    }
+    return { relation: [{ id: extractPageId(value) }] }
+  }
+
+  // Array of strings
+  const relation = new Array(value.length)
+  for (let i = 0; i < value.length; i++) {
+    relation[i] = { id: extractPageId(value[i]) }
+  }
+  return { relation }
+}
+
+/**
  * Convert simple property values to Notion API format
  * Handles auto-detection of property types and conversion
  */
@@ -42,6 +99,8 @@ export function convertToNotionProperties(
         converted[key] = { email: value }
       } else if (schemaType === 'phone_number') {
         converted[key] = { phone_number: value }
+      } else if (schemaType === 'relation') {
+        converted[key] = convertToRelation(value)
       } else if (key === 'Name' || key === 'Title' || key.toLowerCase() === 'title') {
         // Fallback: guess title from key name
         converted[key] = { title: [RichText.text(value)] }
@@ -54,6 +113,12 @@ export function convertToNotionProperties(
     } else if (typeof value === 'boolean') {
       converted[key] = { checkbox: value }
     } else if (Array.isArray(value)) {
+      // Use schema type if available for arrays
+      const schemaType = schema?.[key]
+      if (schemaType === 'relation') {
+        converted[key] = convertToRelation(value)
+        continue
+      }
       // Could be multi_select, relation, people, files
       // Only assume multi_select if all elements are strings
       if (value.length > 0 && value.every((v) => typeof v === 'string')) {
