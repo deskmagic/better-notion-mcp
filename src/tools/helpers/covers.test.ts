@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { formatCover, listCovers } from './covers'
+import { NotionMCPError } from './errors'
 
 describe('formatCover', () => {
   describe('URLs', () => {
@@ -83,6 +84,20 @@ describe('formatCover', () => {
 
     it('should include available covers in error message', () => {
       expect(() => formatCover('bogus')).toThrow('solid_red')
+    })
+  })
+
+  describe('unsafe URL rejection', () => {
+    it('rejects javascript: URLs', () => {
+      expect(() => formatCover('javascript:alert(1)')).toThrow(NotionMCPError)
+    })
+
+    it('rejects data: URLs', () => {
+      expect(() => formatCover('data:text/html,<script>alert(1)</script>')).toThrow(NotionMCPError)
+    })
+
+    it('rejects vbscript: URLs', () => {
+      expect(() => formatCover('vbscript:msgbox(1)')).toThrow(NotionMCPError)
     })
   })
 })

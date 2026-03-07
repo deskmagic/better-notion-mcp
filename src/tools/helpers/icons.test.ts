@@ -63,6 +63,21 @@ describe('formatIcon', () => {
     })
   })
 
+  describe('invalid color shorthand', () => {
+    it('rejects invalid color as unsafe URL scheme', () => {
+      // 'magenta' is not a valid Notion color, so 'document:magenta' is not
+      // recognized as shorthand. It then parses as a URL with 'document:' scheme,
+      // which is not in the safe protocol list, so it throws NotionMCPError.
+      expect(() => formatIcon('document:magenta')).toThrow(NotionMCPError)
+    })
+  })
+
+  describe('empty string input', () => {
+    it('throws NotionMCPError for empty string', () => {
+      expect(() => formatIcon('')).toThrow(NotionMCPError)
+    })
+  })
+
   describe('unsafe URL rejection', () => {
     it('rejects javascript: URLs', () => {
       expect(() => formatIcon('javascript:alert(1)')).toThrow(NotionMCPError)

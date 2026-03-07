@@ -100,13 +100,22 @@ export function formatCover(value: string): { type: 'external'; external: { url:
     return { type: 'external', external: { url: value } }
   }
 
+  // Reject dangerous URL schemes before shorthand lookup
+  if (!isSafeUrl(value)) {
+    throw new NotionMCPError(
+      `Unsafe cover URL: "${value}". Use http: or https: URLs only.`,
+      'VALIDATION_ERROR',
+      'Provide a valid http: or https: URL for the cover image'
+    )
+  }
+
   // Shorthand lookup
   const url = COVER_CATALOG[value]
   if (url) {
     return { type: 'external', external: { url } }
   }
 
-  // Unknown shorthand - try as a direct notion cover path
+  // Unknown shorthand
   throw new NotionMCPError(
     `Unknown cover shorthand: "${value}". Use a URL or one of: ${Object.keys(COVER_CATALOG).join(', ')}`,
     'VALIDATION_ERROR',

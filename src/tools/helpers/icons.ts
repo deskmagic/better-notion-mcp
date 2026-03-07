@@ -36,6 +36,13 @@ function isNotionIconShorthand(value: string): boolean {
  * - Notion built-in shorthand: "document:gray" -> { type: "external", external: { url: "https://www.notion.so/icons/document_gray.svg" } }
  */
 export function formatIcon(value: string): { type: string; [key: string]: any } {
+  if (!value) {
+    throw new NotionMCPError(
+      'Icon value cannot be empty. Provide an emoji, a valid URL, or a built-in shorthand (name:color).',
+      'VALIDATION_ERROR',
+      'Provide an emoji, an http/https URL, or a Notion icon shorthand like "document:gray"'
+    )
+  }
   if (value.startsWith('http://') || value.startsWith('https://')) {
     if (!isSafeUrl(value)) {
       throw new NotionMCPError(
