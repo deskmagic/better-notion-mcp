@@ -17,6 +17,17 @@ MCP server for Notion API. TypeScript, single-package repo.
 - Rich text <-> Markdown conversion must preserve fidelity
 - Zod for input validation on all tool parameters
 
+## Testing (mandatory)
+
+Every bug fix and every new feature must include tests. No exceptions.
+
+- **Bug fixes**: write a failing test that reproduces the bug first, then fix, then verify it passes.
+- **New features**: write tests covering the happy path and relevant error cases.
+- Test files live next to source files (`foo.ts` → `foo.test.ts`).
+- Run the suite before committing: `bun run test`
+
+PRs without tests for changed behavior will be rejected.
+
 ## Commits
 Conventional Commits (feat:, fix:, chore:, docs:, refactor:, test:).
 

@@ -73,6 +73,19 @@ describe('convertToNotionProperties', () => {
         Phone: { phone_number: '+1234567890' }
       })
     })
+
+    it('converts status schema type to status format (not select)', () => {
+      const result = convertToNotionProperties({ Status: 'Not started' }, { Status: 'status' })
+      expect(result).toEqual({
+        Status: { status: { name: 'Not started' } }
+      })
+    })
+
+    it('does not fall back to select when schema type is status', () => {
+      const result = convertToNotionProperties({ State: 'In progress' }, { State: 'status' })
+      expect(result).not.toEqual({ State: { select: { name: 'In progress' } } })
+      expect(result).toEqual({ State: { status: { name: 'In progress' } } })
+    })
   })
 
   describe('string values without schema (auto-detect)', () => {
