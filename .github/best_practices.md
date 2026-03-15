@@ -24,7 +24,7 @@ Every bug fix and every new feature must include tests. No exceptions.
 - **Bug fixes**: write a failing test that reproduces the bug first, then fix, then verify it passes.
 - **New features**: write tests covering the happy path and relevant error cases.
 - Test files live next to source files (`foo.ts` → `foo.test.ts`).
-- Run the suite before committing: `bun run test`
+- **Before every commit**: run `bun run preflight` — this runs Biome format/lint check, TypeScript type-check, all tests, and the build. All must pass. `bun run test` alone is NOT sufficient.
 
 PRs without tests for changed behavior will be rejected.
 

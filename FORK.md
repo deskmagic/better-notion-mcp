@@ -19,7 +19,9 @@ maintained at [deskmagic/better-notion-mcp](https://github.com/deskmagic/better-
 ```bash
 git fetch upstream
 git merge upstream/main
-# Resolve any conflicts, run bun run test, push to origin
+# Resolve any conflicts, then:
+bun run preflight   # check + test + build must all pass
+git push origin main
 ```
 
 This must happen before writing any code. It ensures:
@@ -38,12 +40,13 @@ bun run test   # must show the new test failing
 
 ### Step 3 — Fix the code
 
-Make the minimal change needed to make the failing test pass. Run the full suite.
+Make the minimal change needed to make the failing test pass. Run the full preflight gate.
 
 ```bash
-bun run test   # all tests must pass
-bun run build  # must compile clean
+bun run preflight   # biome check + type-check + all tests + build — must all pass
 ```
+
+**Never commit if preflight fails.** Biome formatting errors will fail CI even if tests pass.
 
 ### Step 4 — Push to the fork and open a PR to fork/main
 
@@ -68,8 +71,7 @@ If yes, create a clean branch off `upstream/main`:
 ```bash
 git checkout -b upstream-pr/fix-my-fix upstream/main
 # Apply only the upstream-relevant changes (NOT FORK.md or fork-specific files)
-bun run test   # verify against upstream's test suite
-bun run build
+bun run preflight   # must pass — CI will run the same checks
 
 git push origin upstream-pr/fix-my-fix
 gh pr create --repo n24q02m/better-notion-mcp --base main \
@@ -99,7 +101,8 @@ does not include these files before pushing.
 git fetch upstream
 git checkout main
 git merge upstream/main
-# Resolve conflicts if any, run bun run test + bun run build
+# Resolve conflicts if any
+bun run preflight   # must pass before push
 git push origin main
 ```
 

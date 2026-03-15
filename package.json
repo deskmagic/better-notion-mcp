@@ -38,6 +38,7 @@
     "type-check": "tsc --noEmit",
     "check": "biome check . && bun run type-check",
     "check:fix": "biome check --write . && bun run type-check",
+    "preflight": "bun run check && bun run test && bun run build",
     "prepublishOnly": "bun run build",
     "docker:build": "docker build -t n24q02m/better-notion-mcp:latest .",
     "docker:push": "docker push n24q02m/better-notion-mcp:latest",
