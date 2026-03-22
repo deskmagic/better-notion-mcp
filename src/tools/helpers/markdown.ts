@@ -280,6 +280,12 @@ export function blocksToMarkdown(blocks: NotionBlock[]): string {
         const calloutIcon = block.callout.icon?.emoji || ''
         const calloutType = getCalloutTypeFromIcon(calloutIcon)
         lines.push(`> [!${calloutType}] ${calloutText}`)
+        if (block.callout.children && block.callout.children.length > 0) {
+          const childMd = blocksToMarkdown(block.callout.children)
+          for (const childLine of childMd.split('\n')) {
+            lines.push(`> ${childLine}`)
+          }
+        }
         break
       }
       case 'toggle': {
@@ -346,6 +352,12 @@ export function blocksToMarkdown(blocks: NotionBlock[]): string {
         break
       case 'breadcrumb':
         lines.push('[breadcrumb]')
+        break
+      case 'child_page':
+        lines.push(`**${block.child_page.title}**`)
+        break
+      case 'child_database':
+        lines.push(`**${block.child_database.title}**`)
         break
       default:
         // Unsupported block type, skip
