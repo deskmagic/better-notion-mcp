@@ -862,6 +862,60 @@ describe('blocksToMarkdown', () => {
       const md = blocksToMarkdown(blocks)
       expect(md).toContain('[!NOTE]')
     })
+
+    it('should render callout children prefixed with > ', () => {
+      const blocks: NotionBlock[] = [
+        {
+          object: 'block',
+          type: 'callout',
+          callout: {
+            rich_text: [plainRichText('Title')],
+            icon: { type: 'emoji', emoji: '\u2139\ufe0f' },
+            color: 'blue_background',
+            children: [
+              {
+                object: 'block',
+                type: 'paragraph',
+                paragraph: { rich_text: [plainRichText('Child content')], color: 'default' }
+              }
+            ]
+          }
+        }
+      ]
+      const md = blocksToMarkdown(blocks)
+      expect(md).toContain('> [!NOTE] Title')
+      expect(md).toContain('> Child content')
+    })
+  })
+
+  describe('child_page blocks', () => {
+    it('should render child_page with its title', () => {
+      const blocks: NotionBlock[] = [
+        {
+          object: 'block',
+          type: 'child_page',
+          child_page: { title: 'My Page' }
+        }
+      ]
+      const md = blocksToMarkdown(blocks)
+      expect(md).toContain('My Page')
+      expect(md).not.toBe('')
+    })
+  })
+
+  describe('child_database blocks', () => {
+    it('should render child_database with its title', () => {
+      const blocks: NotionBlock[] = [
+        {
+          object: 'block',
+          type: 'child_database',
+          child_database: { title: 'My Database' }
+        }
+      ]
+      const md = blocksToMarkdown(blocks)
+      expect(md).toContain('My Database')
+      expect(md).not.toBe('')
+    })
   })
 
   describe('toggles', () => {
