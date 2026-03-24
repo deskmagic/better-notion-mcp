@@ -23,6 +23,7 @@ export interface GetPageResult {
   action: 'get'
   page_id: string
   url: string
+  icon: any | null
   created_time: string
   last_edited_time: string
   archived: boolean
@@ -233,6 +234,7 @@ async function getPage(notion: Client, input: PagesInput): Promise<GetPageResult
     action: 'get',
     page_id: page.id,
     url: page.url,
+    icon: page.icon,
     created_time: page.created_time,
     last_edited_time: page.last_edited_time,
     archived: page.archived,
