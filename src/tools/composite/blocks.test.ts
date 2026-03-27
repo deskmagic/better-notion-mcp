@@ -408,7 +408,14 @@ describe('blocks', () => {
         type: 'mention',
         mention: { page: { id: 'mentioned-page-1' } },
         plain_text: 'Untitled',
-        annotations: { bold: false, italic: false, strikethrough: false, underline: false, code: false, color: 'default' }
+        annotations: {
+          bold: false,
+          italic: false,
+          strikethrough: false,
+          underline: false,
+          code: false,
+          color: 'default'
+        }
       }
 
       mockNotion.blocks.children.list.mockResolvedValue({
@@ -454,7 +461,14 @@ describe('blocks', () => {
                   type: 'mention',
                   mention: { page: { id: 'page-with-title' } },
                   plain_text: 'Already Named',
-                  annotations: { bold: false, italic: false, strikethrough: false, underline: false, code: false, color: 'default' }
+                  annotations: {
+                    bold: false,
+                    italic: false,
+                    strikethrough: false,
+                    underline: false,
+                    code: false,
+                    color: 'default'
+                  }
                 }
               ]
             }

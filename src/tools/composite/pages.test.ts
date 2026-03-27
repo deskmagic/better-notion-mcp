@@ -1024,7 +1024,14 @@ describe('pages', () => {
         type: 'mention',
         mention: { page: { id: 'mentioned-page-id' } },
         plain_text: 'Untitled',
-        annotations: { bold: false, italic: false, strikethrough: false, underline: false, code: false, color: 'default' }
+        annotations: {
+          bold: false,
+          italic: false,
+          strikethrough: false,
+          underline: false,
+          code: false,
+          color: 'default'
+        }
       }
 
       mockNotion.pages.retrieve.mockImplementation(async ({ page_id }: { page_id: string }) => {
@@ -1080,7 +1087,9 @@ describe('pages', () => {
         properties: {}
       })
       mockNotion.blocks.children.list.mockResolvedValue({
-        results: [{ id: 'b-1', type: 'paragraph', paragraph: { rich_text: [{ type: 'text', text: { content: 'Hello' } }] } }],
+        results: [
+          { id: 'b-1', type: 'paragraph', paragraph: { rich_text: [{ type: 'text', text: { content: 'Hello' } }] } }
+        ],
         next_cursor: null,
         has_more: false
       })
