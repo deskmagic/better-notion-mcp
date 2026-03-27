@@ -310,6 +310,93 @@ describe('markdownToBlocks', () => {
       expect(blocks).toHaveLength(1)
       expect(blocks[0].type).toBe('callout')
     })
+
+    describe('custom callout styling', () => {
+      it('should parse custom color:icon syntax', () => {
+        const blocks = markdownToBlocks('> [!gray:search] Status text')
+        expect(blocks).toHaveLength(1)
+        expect(blocks[0].type).toBe('callout')
+        expect(blocks[0].callout.color).toBe('gray_background')
+        expect(blocks[0].callout.icon).toEqual({
+          type: 'external',
+          external: { url: 'https://www.notion.so/icons/search_gray.svg' }
+        })
+        expect(getRichTextContent(blocks[0])).toBe('Status text')
+      })
+
+      it('should parse all valid Notion background colors', () => {
+        const colors = ['gray', 'blue', 'red', 'green', 'yellow', 'purple', 'pink', 'orange', 'brown']
+        for (const color of colors) {
+          const blocks = markdownToBlocks(`> [!${color}:search] Text`)
+          expect(blocks).toHaveLength(1)
+          expect(blocks[0].type).toBe('callout')
+          expect(blocks[0].callout.color).toBe(`${color}_background`)
+          expect(blocks[0].callout.icon.external.url).toBe(
+            `https://www.notion.so/icons/search_${color}.svg`
+          )
+        }
+      })
+
+      it('should handle none for no icon', () => {
+        const blocks = markdownToBlocks('> [!none] Text')
+        expect(blocks).toHaveLength(1)
+        expect(blocks[0].type).toBe('callout')
+        expect(blocks[0].callout.color).toBe('default')
+        expect(blocks[0].callout.icon).toBeUndefined()
+      })
+
+      it('should handle custom syntax with no inline text', () => {
+        const blocks = markdownToBlocks('> [!gray:search]')
+        expect(blocks).toHaveLength(1)
+        expect(blocks[0].type).toBe('callout')
+        expect(blocks[0].callout.color).toBe('gray_background')
+      })
+
+      it('should handle custom syntax with multi-line content', () => {
+        const md = '> [!blue:settings] First line\n> Second line\n> Third line'
+        const blocks = markdownToBlocks(md)
+        expect(blocks).toHaveLength(1)
+        expect(blocks[0].type).toBe('callout')
+        expect(getRichTextContent(blocks[0])).toBe('First line\nSecond line\nThird line')
+        expect(blocks[0].callout.color).toBe('blue_background')
+      })
+
+      it('should not break existing standard callout types', () => {
+        const standardTypes = ['NOTE', 'TIP', 'IMPORTANT', 'WARNING', 'CAUTION', 'INFO', 'SUCCESS', 'ERROR']
+        for (const type of standardTypes) {
+          const blocks = markdownToBlocks(`> [!${type}] Text`)
+          expect(blocks[0].type).toBe('callout')
+          expect(blocks[0].callout.icon.type).toBe('emoji')
+          expect(blocks[0].callout.icon.emoji).toBeTruthy()
+        }
+      })
+
+      it('should be case-insensitive for custom syntax', () => {
+        const blocks = markdownToBlocks('> [!Gray:Search] Text')
+        expect(blocks).toHaveLength(1)
+        expect(blocks[0].type).toBe('callout')
+        expect(blocks[0].callout.color).toBe('gray_background')
+        expect(blocks[0].callout.icon.external.url).toBe(
+          'https://www.notion.so/icons/search_gray.svg'
+        )
+      })
+
+      it('should not match color-only without colon as custom callout', () => {
+        const blocks = markdownToBlocks('> [!gray] Text')
+        expect(blocks).toHaveLength(1)
+        // Should fall through to quote, not callout
+        expect(blocks[0].type).toBe('quote')
+      })
+
+      it('should handle icon names with underscores', () => {
+        const blocks = markdownToBlocks('> [!blue:help_circle] Text')
+        expect(blocks).toHaveLength(1)
+        expect(blocks[0].type).toBe('callout')
+        expect(blocks[0].callout.icon.external.url).toBe(
+          'https://www.notion.so/icons/help_circle_blue.svg'
+        )
+      })
+    })
   })
 
   describe('toggles', () => {
