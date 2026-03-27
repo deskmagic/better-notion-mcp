@@ -6,6 +6,7 @@
  *           equations, columns, table of contents, breadcrumb
  */
 
+import { formatIcon } from './icons.js'
 import { isSafeUrl } from './security.js'
 
 export interface NotionBlock {
@@ -59,7 +60,8 @@ function createMention(
 }
 
 // Regular expressions for block parsing
-const CALLOUT_REGEX = /^>\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION|INFO|SUCCESS|ERROR)\]\s*(.*)/i
+const CALLOUT_REGEX =
+  /^>\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION|INFO|SUCCESS|ERROR|none|[a-zA-Z]+:[a-zA-Z_]+)\]\s*(.*)/i
 const IMAGE_REGEX = /^!\[([^\]]*)\]\(([^)]+)\)$/
 const BOOKMARK_REGEX = /^\[(bookmark|embed)\]\(([^)]+)\)$/i
 const CHECKED_LIST_REGEX = /^[-*]\s\[([ xX])\]\s/
@@ -118,9 +120,11 @@ export function markdownToBlocks(markdown: string): NotionBlock[] {
     const calloutMatch = line.match(CALLOUT_REGEX)
     if (calloutMatch) {
       const calloutData = parseCalloutBlock(lines, i, calloutMatch)
-      blocks.push(calloutData.block)
-      i = calloutData.endIndex
-      continue
+      if (calloutData) {
+        blocks.push(calloutData.block)
+        i = calloutData.endIndex
+        continue
+      }
     }
 
     // Image ![alt](url)
@@ -548,8 +552,12 @@ interface ParseResult {
   endIndex: number
 }
 
-function parseCalloutBlock(lines: string[], startIndex: number, match: RegExpMatchArray): ParseResult {
-  const calloutType = match[1].toUpperCase()
+function parseCalloutBlock(lines: string[], startIndex: number, match: RegExpMatchArray): ParseResult | null {
+  const rawType = match[1]
+  const style = resolveCalloutStyle(rawType)
+
+  if (!style) return null
+
   let calloutContent = match[2] || ''
   let i = startIndex
 
@@ -559,9 +567,10 @@ function parseCalloutBlock(lines: string[], startIndex: number, match: RegExpMat
     calloutContent += (calloutContent ? '\n' : '') + lines[i].slice(2)
   }
 
-  const icon = getCalloutIcon(calloutType)
-  const color = getCalloutColor(calloutType)
-  return { block: createCallout(calloutContent || calloutType, icon, color), endIndex: i }
+  return {
+    block: createCallout(calloutContent || (style.isStandard ? rawType.toUpperCase() : ''), style.icon, style.color),
+    endIndex: i
+  }
 }
 
 function parseCodeBlock(lines: string[], startIndex: number, line: string): ParseResult {
@@ -790,6 +799,44 @@ function parseColumns(lines: string[], startIndex: number): ColumnParseResult {
 // Callout helpers
 // ============================================================
 
+const STANDARD_CALLOUT_TYPES = new Set(['NOTE', 'TIP', 'IMPORTANT', 'WARNING', 'CAUTION', 'INFO', 'SUCCESS', 'ERROR'])
+
+interface CalloutStyle {
+  icon: { type: string; [key: string]: any } | null
+  color: string
+  isStandard: boolean
+}
+
+function resolveCalloutStyle(rawType: string): CalloutStyle | null {
+  const upper = rawType.toUpperCase()
+
+  if (STANDARD_CALLOUT_TYPES.has(upper)) {
+    return {
+      icon: { type: 'emoji', emoji: getCalloutIcon(upper) },
+      color: getCalloutColor(upper),
+      isStandard: true
+    }
+  }
+
+  if (rawType.toLowerCase() === 'none') {
+    return { icon: null, color: 'default', isStandard: false }
+  }
+
+  const colonIdx = rawType.indexOf(':')
+  if (colonIdx > 0) {
+    const color = rawType.slice(0, colonIdx).toLowerCase()
+    const iconName = rawType.slice(colonIdx + 1).toLowerCase()
+    try {
+      const icon = formatIcon(`${iconName}:${color}`)
+      return { icon, color: `${color}_background`, isStandard: false }
+    } catch {
+      return null
+    }
+  }
+
+  return null
+}
+
 function getCalloutIcon(type: string): string {
   const icons: Record<string, string> = {
     NOTE: '\u2139\ufe0f',
@@ -940,16 +987,15 @@ function createDivider(): NotionBlock {
   }
 }
 
-function createCallout(text: string, icon: string, color: string): NotionBlock {
-  return {
-    object: 'block',
-    type: 'callout',
-    callout: {
-      rich_text: parseRichText(text),
-      icon: { type: 'emoji', emoji: icon },
-      color
-    }
+function createCallout(text: string, icon: { type: string; [key: string]: any } | null, color: string): NotionBlock {
+  const callout: any = {
+    rich_text: parseRichText(text),
+    color
   }
+  if (icon !== null) {
+    callout.icon = icon
+  }
+  return { object: 'block', type: 'callout', callout }
 }
 
 function createToggle(text: string, children: NotionBlock[] = []): NotionBlock {
