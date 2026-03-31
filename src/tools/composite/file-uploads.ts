@@ -313,10 +313,14 @@ async function uploadFile(notion: Client, input: FileUploadsInput): Promise<any>
     file: { data: blob, filename: input.filename }
   })
 
-  // Step 3: Complete
-  await (notion as any).fileUploads.complete({
-    file_upload_id: fileUploadId
-  })
+  // Step 3: Complete (only needed for multi-part — single-part auto-completes after send)
+  try {
+    await (notion as any).fileUploads.complete({
+      file_upload_id: fileUploadId
+    })
+  } catch {
+    // Ignore — single-part uploads are already in 'uploaded' status after send
+  }
 
   return {
     action: 'upload',

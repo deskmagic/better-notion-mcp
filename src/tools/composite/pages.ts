@@ -203,10 +203,14 @@ async function uploadIconFile(
     file: { data: blob, filename: iconFile.filename }
   })
 
-  // Step 3: Complete the upload
-  await (notion as any).fileUploads.complete({
-    file_upload_id: upload.id
-  })
+  // Step 3: Complete (only needed for multi-part — single-part auto-completes after send)
+  try {
+    await (notion as any).fileUploads.complete({
+      file_upload_id: upload.id
+    })
+  } catch {
+    // Ignore — single-part uploads are already in 'uploaded' status after send
+  }
 
   return { type: 'file_upload', file_upload: { id: upload.id } }
 }

@@ -142,10 +142,14 @@ export async function resolveIcon(
     file: { data: blob, filename }
   })
 
-  // Complete
-  await (notion as any).fileUploads.complete({
-    file_upload_id: createResult.id
-  })
+  // Complete (only needed for multi-part uploads — single-part auto-completes after send)
+  try {
+    await (notion as any).fileUploads.complete({
+      file_upload_id: createResult.id
+    })
+  } catch {
+    // Ignore — single-part uploads are already in 'uploaded' status after send
+  }
 
   return { type: 'file_upload', file_upload: { id: createResult.id } }
 }
