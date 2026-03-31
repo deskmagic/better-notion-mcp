@@ -6,7 +6,7 @@
 import type { Client } from '@notionhq/client'
 import { formatCover } from '../helpers/covers.js'
 import { NotionMCPError, withErrorHandling } from '../helpers/errors.js'
-import { formatIcon } from '../helpers/icons.js'
+import { formatIcon, resolveIcon } from '../helpers/icons.js'
 import { isValidBase64 } from '../helpers/id.js'
 import { blocksToMarkdown, collectMentionIds, markdownToBlocks, replaceMentionTitles } from '../helpers/markdown.js'
 import { autoPaginate, fetchChildrenRecursive, processBatches } from '../helpers/pagination.js'
@@ -203,6 +203,11 @@ async function uploadIconFile(
     file: { data: blob, filename: iconFile.filename }
   })
 
+  // Step 3: Complete the upload
+  await (notion as any).fileUploads.complete({
+    file_upload_id: upload.id
+  })
+
   return { type: 'file_upload', file_upload: { id: upload.id } }
 }
 
@@ -248,7 +253,7 @@ async function createPage(notion: Client, input: PagesInput): Promise<CreatePage
   if (input.icon_file) {
     pageData.icon = await uploadIconFile(notion, input.icon_file)
   } else if (input.icon) {
-    pageData.icon = formatIcon(input.icon)
+    pageData.icon = await resolveIcon(formatIcon(input.icon), notion)
   }
   if (input.cover) pageData.cover = formatCover(input.cover)
 
@@ -447,7 +452,7 @@ async function updatePage(notion: Client, input: PagesInput): Promise<UpdatePage
   if (input.icon_file) {
     updates.icon = await uploadIconFile(notion, input.icon_file)
   } else if (input.icon) {
-    updates.icon = formatIcon(input.icon)
+    updates.icon = await resolveIcon(formatIcon(input.icon), notion)
   }
   if (input.cover) updates.cover = formatCover(input.cover)
   if (input.archived !== undefined) updates.archived = input.archived

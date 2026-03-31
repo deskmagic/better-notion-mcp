@@ -888,6 +888,11 @@ function resolveCalloutType(callout: any): string {
     return getCalloutTypeFromIcon(icon.emoji)
   }
 
+  // Native Notion built-in icon format
+  if (icon.type === 'icon' && icon.icon?.name && icon.icon?.color) {
+    return `${icon.icon.color}:${icon.icon.name}`
+  }
+
   if (icon.type === 'external' && icon.external?.url) {
     const match = icon.external.url.match(NOTION_ICON_URL_REGEX)
     if (match) {

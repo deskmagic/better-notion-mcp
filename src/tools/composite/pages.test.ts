@@ -1116,7 +1116,8 @@ describe('pages', () => {
           status: 'pending',
           upload_url: 'https://api.notion.com/v1/file_uploads/file-upload-123/send'
         }),
-        send: vi.fn().mockResolvedValue({ status: 'uploaded' })
+        send: vi.fn().mockResolvedValue({ status: 'uploaded' }),
+        complete: vi.fn().mockResolvedValue({ status: 'uploaded' })
       }
     })
 

@@ -14,7 +14,7 @@ const MAX_FILE_SIZE_MB = 10
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
 
 export interface FileUploadsInput {
-  action: 'create' | 'send' | 'complete' | 'retrieve' | 'list'
+  action: 'create' | 'send' | 'complete' | 'retrieve' | 'list' | 'upload'
 
   // Common params
   file_upload_id?: string
@@ -55,11 +55,14 @@ export async function fileUploads(notion: Client, input: FileUploadsInput): Prom
       case 'list':
         return await listFileUploads(notion, input)
 
+      case 'upload':
+        return await uploadFile(notion, input)
+
       default:
         throw new NotionMCPError(
           `Unknown action: ${input.action}`,
           'VALIDATION_ERROR',
-          'Supported actions: create, send, complete, retrieve, list'
+          'Supported actions: create, send, complete, retrieve, list, upload'
         )
     }
   })()
@@ -259,5 +262,68 @@ async function listFileUploads(notion: Client, input: FileUploadsInput): Promise
       status: f.status,
       created_time: f.created_time
     }))
+  }
+}
+
+/**
+ * Single-step upload: create + send + complete in one call
+ * Convenience action that combines the three-step upload workflow
+ */
+async function uploadFile(notion: Client, input: FileUploadsInput): Promise<any> {
+  if (!input.filename) {
+    throw new NotionMCPError('filename is required for upload action', 'VALIDATION_ERROR', 'Provide filename')
+  }
+
+  if (!input.content_type) {
+    throw new NotionMCPError(
+      'content_type is required for upload action',
+      'VALIDATION_ERROR',
+      'Provide content_type (e.g., "image/png", "application/pdf")'
+    )
+  }
+
+  if (!input.file_content) {
+    throw new NotionMCPError(
+      'file_content is required for upload action',
+      'VALIDATION_ERROR',
+      'Provide base64-encoded file content'
+    )
+  }
+
+  // Step 1: Create upload session
+  const createResponse: any = await (notion as any).fileUploads.create({
+    filename: input.filename,
+    content_type: input.content_type
+  })
+  const fileUploadId = createResponse.id
+
+  // Step 2: Send file content
+  if (!isValidBase64(input.file_content)) {
+    throw new NotionMCPError(
+      'file_content is not valid base64 encoding',
+      'VALIDATION_ERROR',
+      'Encode the file as base64 first.'
+    )
+  }
+
+  const fileBuffer = Buffer.from(input.file_content, 'base64')
+  const blob = new Blob([fileBuffer], { type: input.content_type })
+  await (notion as any).fileUploads.send({
+    file_upload_id: fileUploadId,
+    file: { data: blob, filename: input.filename }
+  })
+
+  // Step 3: Complete
+  await (notion as any).fileUploads.complete({
+    file_upload_id: fileUploadId
+  })
+
+  return {
+    action: 'upload',
+    file_upload_id: fileUploadId,
+    status: 'uploaded',
+    filename: input.filename,
+    content_type: input.content_type,
+    completed: true
   }
 }

@@ -307,6 +307,97 @@ describe('fileUploads', () => {
     })
   })
 
+  describe('upload (single-step)', () => {
+    it('should require filename', async () => {
+      await expect(
+        fileUploads(mockNotion as any, {
+          action: 'upload',
+          content_type: 'image/png',
+          file_content: Buffer.from('data').toString('base64')
+        })
+      ).rejects.toThrow('filename is required')
+    })
+
+    it('should require content_type', async () => {
+      await expect(
+        fileUploads(mockNotion as any, {
+          action: 'upload',
+          filename: 'logo.png',
+          file_content: Buffer.from('data').toString('base64')
+        })
+      ).rejects.toThrow('content_type is required')
+    })
+
+    it('should require file_content', async () => {
+      await expect(
+        fileUploads(mockNotion as any, {
+          action: 'upload',
+          filename: 'logo.png',
+          content_type: 'image/png'
+        })
+      ).rejects.toThrow('file_content is required')
+    })
+
+    it('should perform create + send + complete in sequence', async () => {
+      const base64Content = Buffer.from('png-data').toString('base64')
+      const callOrder: string[] = []
+
+      mockNotion.fileUploads.create.mockImplementation(async () => {
+        callOrder.push('create')
+        return { id: 'upload-789', status: 'pending', filename: 'logo.png', content_type: 'image/png' }
+      })
+      mockNotion.fileUploads.send.mockImplementation(async () => {
+        callOrder.push('send')
+        return { status: 'uploaded' }
+      })
+      mockNotion.fileUploads.complete.mockImplementation(async () => {
+        callOrder.push('complete')
+        return { status: 'uploaded' }
+      })
+
+      const result = await fileUploads(mockNotion as any, {
+        action: 'upload',
+        filename: 'logo.png',
+        content_type: 'image/png',
+        file_content: base64Content
+      })
+
+      expect(callOrder).toEqual(['create', 'send', 'complete'])
+      expect(mockNotion.fileUploads.create).toHaveBeenCalledWith({
+        filename: 'logo.png',
+        content_type: 'image/png'
+      })
+      expect(mockNotion.fileUploads.send).toHaveBeenCalled()
+      expect(mockNotion.fileUploads.complete).toHaveBeenCalledWith({
+        file_upload_id: 'upload-789'
+      })
+    })
+
+    it('should return file_upload_id on success', async () => {
+      const base64Content = Buffer.from('png-data').toString('base64')
+      mockNotion.fileUploads.create.mockResolvedValue({
+        id: 'upload-final',
+        status: 'pending',
+        filename: 'logo.png',
+        content_type: 'image/png'
+      })
+      mockNotion.fileUploads.send.mockResolvedValue({ status: 'uploaded' })
+      mockNotion.fileUploads.complete.mockResolvedValue({ status: 'uploaded' })
+
+      const result = await fileUploads(mockNotion as any, {
+        action: 'upload',
+        filename: 'logo.png',
+        content_type: 'image/png',
+        file_content: base64Content
+      })
+
+      expect(result.action).toBe('upload')
+      expect(result.file_upload_id).toBe('upload-final')
+      expect(result.status).toBe('uploaded')
+      expect(result.completed).toBe(true)
+    })
+  })
+
   it('should throw on unknown action', async () => {
     await expect(fileUploads(mockNotion as any, { action: 'invalid' as any })).rejects.toThrow(
       'Unknown action: invalid'

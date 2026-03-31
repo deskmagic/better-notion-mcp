@@ -318,8 +318,8 @@ describe('markdownToBlocks', () => {
         expect(blocks[0].type).toBe('callout')
         expect(blocks[0].callout.color).toBe('gray_background')
         expect(blocks[0].callout.icon).toEqual({
-          type: 'external',
-          external: { url: 'https://www.notion.so/icons/search_gray.svg' }
+          type: 'icon',
+          icon: { name: 'search', color: 'gray' }
         })
         expect(getRichTextContent(blocks[0])).toBe('Status text')
       })
@@ -331,7 +331,7 @@ describe('markdownToBlocks', () => {
           expect(blocks).toHaveLength(1)
           expect(blocks[0].type).toBe('callout')
           expect(blocks[0].callout.color).toBe(`${color}_background`)
-          expect(blocks[0].callout.icon.external.url).toBe(`https://www.notion.so/icons/search_${color}.svg`)
+          expect(blocks[0].callout.icon).toEqual({ type: 'icon', icon: { name: 'search', color } })
         }
       })
 
@@ -374,7 +374,7 @@ describe('markdownToBlocks', () => {
         expect(blocks).toHaveLength(1)
         expect(blocks[0].type).toBe('callout')
         expect(blocks[0].callout.color).toBe('gray_background')
-        expect(blocks[0].callout.icon.external.url).toBe('https://www.notion.so/icons/search_gray.svg')
+        expect(blocks[0].callout.icon).toEqual({ type: 'icon', icon: { name: 'search', color: 'gray' } })
       })
 
       it('should not match color-only without colon as custom callout', () => {
@@ -388,7 +388,7 @@ describe('markdownToBlocks', () => {
         const blocks = markdownToBlocks('> [!blue:help_circle] Text')
         expect(blocks).toHaveLength(1)
         expect(blocks[0].type).toBe('callout')
-        expect(blocks[0].callout.icon.external.url).toBe('https://www.notion.so/icons/help_circle_blue.svg')
+        expect(blocks[0].callout.icon).toEqual({ type: 'icon', icon: { name: 'help_circle', color: 'blue' } })
       })
     })
   })

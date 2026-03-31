@@ -6,7 +6,7 @@
 import type { Client } from '@notionhq/client'
 import { formatCover } from '../helpers/covers.js'
 import { NotionMCPError, withErrorHandling } from '../helpers/errors.js'
-import { formatIcon } from '../helpers/icons.js'
+import { formatIcon, resolveIcon } from '../helpers/icons.js'
 import { normalizeId } from '../helpers/id.js'
 import { autoPaginate, processBatches } from '../helpers/pagination.js'
 import { convertToNotionProperties, extractPageProperties } from '../helpers/properties.js'
@@ -723,7 +723,7 @@ async function updateDatabaseContainer(notion: Client, input: DatabasesInput): P
   }
 
   if (input.icon) {
-    updates.icon = formatIcon(input.icon)
+    updates.icon = await resolveIcon(formatIcon(input.icon), notion)
   }
 
   if (input.cover) updates.cover = formatCover(input.cover)
