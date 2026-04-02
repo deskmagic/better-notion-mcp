@@ -1569,13 +1569,190 @@ describe('blocksToMarkdown', () => {
     })
   })
 
+  describe('file blocks', () => {
+    it('should render Notion-hosted file with name', () => {
+      const blocks: NotionBlock[] = [
+        {
+          object: 'block',
+          type: 'file',
+          file: {
+            type: 'file',
+            file: { url: 'https://prod-files.notion.so/document.pdf' },
+            caption: [],
+            name: 'document.pdf'
+          }
+        }
+      ]
+      expect(blocksToMarkdown(blocks)).toBe('📎 [document.pdf](https://prod-files.notion.so/document.pdf)')
+    })
+
+    it('should render external file', () => {
+      const blocks: NotionBlock[] = [
+        {
+          object: 'block',
+          type: 'file',
+          file: {
+            type: 'external',
+            external: { url: 'https://example.com/file.zip' },
+            caption: [],
+            name: 'file.zip'
+          }
+        }
+      ]
+      expect(blocksToMarkdown(blocks)).toBe('📎 [file.zip](https://example.com/file.zip)')
+    })
+
+    it('should prefer caption over name for file', () => {
+      const blocks: NotionBlock[] = [
+        {
+          object: 'block',
+          type: 'file',
+          file: {
+            type: 'file',
+            file: { url: 'https://prod-files.notion.so/doc.pdf' },
+            caption: [plainRichText('My document')],
+            name: 'doc.pdf'
+          }
+        }
+      ]
+      expect(blocksToMarkdown(blocks)).toBe('📎 [My document](https://prod-files.notion.so/doc.pdf)')
+    })
+
+    it('should fallback to "File" when no caption or name', () => {
+      const blocks: NotionBlock[] = [
+        {
+          object: 'block',
+          type: 'file',
+          file: {
+            type: 'file',
+            file: { url: 'https://prod-files.notion.so/something' },
+            caption: []
+          }
+        }
+      ]
+      expect(blocksToMarkdown(blocks)).toBe('📎 [File](https://prod-files.notion.so/something)')
+    })
+  })
+
+  describe('pdf blocks', () => {
+    it('should render Notion-hosted PDF with caption', () => {
+      const blocks: NotionBlock[] = [
+        {
+          object: 'block',
+          type: 'pdf',
+          pdf: {
+            type: 'file',
+            file: { url: 'https://prod-files.notion.so/report.pdf' },
+            caption: [plainRichText('Annual report')]
+          }
+        }
+      ]
+      expect(blocksToMarkdown(blocks)).toBe('📄 [Annual report](https://prod-files.notion.so/report.pdf)')
+    })
+
+    it('should render external PDF', () => {
+      const blocks: NotionBlock[] = [
+        {
+          object: 'block',
+          type: 'pdf',
+          pdf: {
+            type: 'external',
+            external: { url: 'https://example.com/report.pdf' },
+            caption: []
+          }
+        }
+      ]
+      expect(blocksToMarkdown(blocks)).toBe('📄 [PDF](https://example.com/report.pdf)')
+    })
+
+    it('should use name when no caption for PDF', () => {
+      const blocks: NotionBlock[] = [
+        {
+          object: 'block',
+          type: 'pdf',
+          pdf: {
+            type: 'file',
+            file: { url: 'https://prod-files.notion.so/report.pdf' },
+            caption: [],
+            name: 'quarterly-report.pdf'
+          }
+        }
+      ]
+      expect(blocksToMarkdown(blocks)).toBe('📄 [quarterly-report.pdf](https://prod-files.notion.so/report.pdf)')
+    })
+  })
+
+  describe('video blocks', () => {
+    it('should render Notion-hosted video', () => {
+      const blocks: NotionBlock[] = [
+        {
+          object: 'block',
+          type: 'video',
+          video: {
+            type: 'file',
+            file: { url: 'https://prod-files.notion.so/clip.mp4' },
+            caption: [plainRichText('Demo video')]
+          }
+        }
+      ]
+      expect(blocksToMarkdown(blocks)).toBe('🎬 [Demo video](https://prod-files.notion.so/clip.mp4)')
+    })
+
+    it('should render external video', () => {
+      const blocks: NotionBlock[] = [
+        {
+          object: 'block',
+          type: 'video',
+          video: {
+            type: 'external',
+            external: { url: 'https://youtube.com/watch?v=abc' },
+            caption: []
+          }
+        }
+      ]
+      expect(blocksToMarkdown(blocks)).toBe('🎬 [Video](https://youtube.com/watch?v=abc)')
+    })
+  })
+
+  describe('audio blocks', () => {
+    it('should render Notion-hosted audio', () => {
+      const blocks: NotionBlock[] = [
+        {
+          object: 'block',
+          type: 'audio',
+          audio: {
+            type: 'file',
+            file: { url: 'https://prod-files.notion.so/song.mp3' },
+            caption: [plainRichText('Interview recording')]
+          }
+        }
+      ]
+      expect(blocksToMarkdown(blocks)).toBe('🔊 [Interview recording](https://prod-files.notion.so/song.mp3)')
+    })
+
+    it('should render external audio', () => {
+      const blocks: NotionBlock[] = [
+        {
+          object: 'block',
+          type: 'audio',
+          audio: {
+            type: 'external',
+            external: { url: 'https://example.com/podcast.mp3' },
+            caption: []
+          }
+        }
+      ]
+      expect(blocksToMarkdown(blocks)).toBe('🔊 [Audio](https://example.com/podcast.mp3)')
+    })
+  })
+
   describe('unsupported block types', () => {
     it('should skip unknown block types', () => {
       const blocks: NotionBlock[] = [
         {
           object: 'block',
-          type: 'audio',
-          audio: { url: 'https://example.com/song.mp3' }
+          type: 'synced_block',
+          synced_block: {}
         }
       ]
       expect(blocksToMarkdown(blocks)).toBe('')

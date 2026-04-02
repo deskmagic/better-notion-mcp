@@ -345,6 +345,20 @@ export function blocksToMarkdown(blocks: NotionBlock[]): string {
         lines.push(`![${caption}](${imageUrl})`)
         break
       }
+      case 'file':
+      case 'pdf':
+      case 'video':
+      case 'audio': {
+        const mediaData = block[block.type]
+        const mediaUrl = mediaData?.file?.url || mediaData?.external?.url || ''
+        const captionText = mediaData?.caption?.length ? richTextToMarkdown(mediaData.caption) : ''
+        const nameText = mediaData?.name || ''
+        const fallbackLabels: Record<string, string> = { file: 'File', pdf: 'PDF', video: 'Video', audio: 'Audio' }
+        const displayName = captionText || nameText || fallbackLabels[block.type]
+        const emojis: Record<string, string> = { file: '📎', pdf: '📄', video: '🎬', audio: '🔊' }
+        lines.push(`${emojis[block.type]} [${displayName}](${mediaUrl})`)
+        break
+      }
       case 'bookmark':
         lines.push(`[bookmark](${block.bookmark.url})`)
         break
