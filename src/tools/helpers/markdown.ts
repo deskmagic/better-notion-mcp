@@ -72,20 +72,37 @@ const DIVIDER_REGEX = /^[-*]{3,}$/
 /**
  * Convert markdown string to Notion blocks
  */
-export function markdownToBlocks(markdown: string): NotionBlock[] {
-  const lines = markdown.split('\n')
-  const blocks: NotionBlock[] = []
-  let currentList: NotionBlock[] = []
-  let currentListType: 'bulleted' | 'numbered' | null = null
+class MarkdownParser {
+  private lines: string[]
+  private blocks: NotionBlock[] = []
+  private currentList: NotionBlock[] = []
+  private currentListType: 'bulleted' | 'numbered' | null = null
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
+  constructor(markdown: string) {
+    this.lines = markdown.split('\n')
+  }
+
+  public parse(): NotionBlock[] {
+    for (let i = 0; i < this.lines.length; i++) {
+      i = this.parseBlock(i)
+    }
+
+    // Flush remaining list
+    if (this.currentList.length > 0) {
+      this.blocks.push(...this.currentList)
+    }
+
+    return this.blocks
+  }
+
+  private parseBlock(i: number): number {
+    const line = this.lines[i]
 
     // Flush list if we're not in a list anymore
-    if (currentListType && !isListItem(line)) {
-      blocks.push(...currentList)
-      currentList = []
-      currentListType = null
+    if (this.currentListType && !isListItem(line)) {
+      this.blocks.push(...this.currentList)
+      this.currentList = []
+      this.currentListType = null
     }
 
     // Cache trimmed line for performance to avoid repeated string allocations
@@ -93,37 +110,35 @@ export function markdownToBlocks(markdown: string): NotionBlock[] {
 
     // Skip empty lines
     if (!trimmedLine) {
-      continue
+      return i
     }
 
     // Table of Contents [toc]
     if (trimmedLine === '[toc]' || trimmedLine === '[TOC]') {
-      blocks.push(createTableOfContents())
-      continue
+      this.blocks.push(createTableOfContents())
+      return i
     }
 
     // Breadcrumb [breadcrumb]
     if (trimmedLine === '[breadcrumb]' || trimmedLine === '[BREADCRUMB]') {
-      blocks.push(createBreadcrumb())
-      continue
+      this.blocks.push(createBreadcrumb())
+      return i
     }
 
-    // Equation block $$...$$
+    // Equation block $...$
     if (trimmedLine.startsWith('$$')) {
-      const eqData = parseEquationBlock(lines, i, trimmedLine)
-      blocks.push(eqData.block)
-      i = eqData.endIndex
-      continue
+      const eqData = parseEquationBlock(this.lines, i, trimmedLine)
+      this.blocks.push(eqData.block)
+      return eqData.endIndex
     }
 
     // Callout > [!TYPE] content or > [!TYPE]\n> content
     const calloutMatch = line.match(CALLOUT_REGEX)
     if (calloutMatch) {
-      const calloutData = parseCalloutBlock(lines, i, calloutMatch)
+      const calloutData = parseCalloutBlock(this.lines, i, calloutMatch)
       if (calloutData) {
-        blocks.push(calloutData.block)
-        i = calloutData.endIndex
-        continue
+        this.blocks.push(calloutData.block)
+        return calloutData.endIndex
       }
     }
 
@@ -132,11 +147,11 @@ export function markdownToBlocks(markdown: string): NotionBlock[] {
     if (imageMatch) {
       const url = imageMatch[2]
       if (isSafeUrl(url)) {
-        blocks.push(createImage(url, imageMatch[1]))
+        this.blocks.push(createImage(url, imageMatch[1]))
       } else {
-        blocks.push(createParagraph(line))
+        this.blocks.push(createParagraph(line))
       }
-      continue
+      return i
     }
 
     // Bookmark/Embed [bookmark](url) or [embed](url)
@@ -146,102 +161,104 @@ export function markdownToBlocks(markdown: string): NotionBlock[] {
       const url = bookmarkMatch[2]
       if (isSafeUrl(url)) {
         if (type === 'embed') {
-          blocks.push(createEmbed(url))
+          this.blocks.push(createEmbed(url))
         } else {
-          blocks.push(createBookmark(url))
+          this.blocks.push(createBookmark(url))
         }
       } else {
-        blocks.push(createParagraph(line))
+        this.blocks.push(createParagraph(line))
       }
-      continue
+      return i
     }
 
     // Toggle <details><summary>Title</summary>
     if (trimmedLine === '<details>' || trimmedLine.startsWith('<details>')) {
-      const toggleData = parseToggle(lines, i)
-      blocks.push(createToggle(toggleData.title, toggleData.children))
-      i = toggleData.endIndex
-      continue
+      const toggleData = parseToggle(this.lines, i)
+      this.blocks.push(createToggle(toggleData.title, toggleData.children))
+      return toggleData.endIndex
     }
 
     // Column layout :::columns
     if (trimmedLine === ':::columns') {
-      const columnData = parseColumns(lines, i)
-      blocks.push(createColumnList(columnData.columns, columnData.widthRatios))
-      i = columnData.endIndex
-      continue
+      const columnData = parseColumns(this.lines, i)
+      this.blocks.push(createColumnList(columnData.columns, columnData.widthRatios))
+      return columnData.endIndex
     }
 
     // Table (pipe-delimited)
     if (line.includes('|') && trimmedLine.startsWith('|')) {
-      const tableData = parseTable(lines, i)
+      const tableData = parseTable(this.lines, i)
       if (tableData) {
-        blocks.push(createTable(tableData.headers, tableData.rows, tableData.hasHeader))
-        i = tableData.endIndex
-        continue
+        this.blocks.push(createTable(tableData.headers, tableData.rows, tableData.hasHeader))
+        return tableData.endIndex
       }
     }
 
     // Heading
     if (line.startsWith('# ')) {
-      blocks.push(createHeading(1, line.slice(2)))
+      this.blocks.push(createHeading(1, line.slice(2)))
     } else if (line.startsWith('## ')) {
-      blocks.push(createHeading(2, line.slice(3)))
+      this.blocks.push(createHeading(2, line.slice(3)))
     } else if (line.startsWith('### ')) {
-      blocks.push(createHeading(3, line.slice(4)))
+      this.blocks.push(createHeading(3, line.slice(4)))
     }
 
     // Code block
     else if (line.startsWith('```')) {
-      const codeData = parseCodeBlock(lines, i, line)
-      blocks.push(codeData.block)
-      i = codeData.endIndex
+      const codeData = parseCodeBlock(this.lines, i, line)
+      this.blocks.push(codeData.block)
+      return codeData.endIndex
     }
 
     // Task list / Checkbox list - [ ] or - [x]
     else if (CHECKED_LIST_REGEX.test(line)) {
       const checked = line[3] !== ' '
       const text = line.replace(CHECKED_LIST_REGEX, '')
-      currentListType = 'bulleted'
-      currentList.push(createTodoItem(text, checked))
+      this.currentListType = 'bulleted'
+      this.currentList.push(createTodoItem(text, checked))
     }
     // Bulleted list
     else if (BULLETED_LIST_REGEX.test(line)) {
       const text = line.replace(BULLETED_LIST_REGEX, '')
-      currentListType = 'bulleted'
-      currentList.push(createBulletedListItem(text))
+      this.currentListType = 'bulleted'
+      this.currentList.push(createBulletedListItem(text))
     }
     // Numbered list
     else if (NUMBERED_LIST_REGEX.test(line)) {
       const text = line.replace(NUMBERED_LIST_REGEX, '')
-      currentListType = 'numbered'
-      currentList.push(createNumberedListItem(text))
+      this.currentListType = 'numbered'
+      this.currentList.push(createNumberedListItem(text))
     }
     // Quote
     else if (line.startsWith('> ')) {
-      blocks.push(createQuote(line.slice(2)))
+      this.blocks.push(createQuote(line.slice(2)))
     }
     // Divider
     else if (DIVIDER_REGEX.test(line)) {
-      blocks.push(createDivider())
+      this.blocks.push(createDivider())
     }
     // Regular paragraph
     else {
-      blocks.push(createParagraph(line))
+      this.blocks.push(createParagraph(line))
     }
-  }
 
-  // Flush remaining list
-  if (currentList.length > 0) {
-    blocks.push(...currentList)
+    return i
   }
+}
 
-  return blocks
+export function markdownToBlocks(markdown: string): NotionBlock[] {
+  const parser = new MarkdownParser(markdown)
+  return parser.parse()
 }
 
 /**
  * Convert Notion blocks to markdown
  */
+function indentChildren(children: NotionBlock[]): string {
+  // Optimized: use highly optimized C++ RegExp engine instead of creating thousands of intermediate JS array/string objects
+  return blocksToMarkdown(children).replace(/^/gm, '  ')
+}
+
 export function blocksToMarkdown(blocks: NotionBlock[]): string {
   const lines: string[] = []
 
@@ -249,24 +266,42 @@ export function blocksToMarkdown(blocks: NotionBlock[]): string {
     switch (block.type) {
       case 'heading_1':
         lines.push(`# ${richTextToMarkdown(block.heading_1.rich_text)}`)
+        if (block.heading_1.children?.length > 0) {
+          lines.push(blocksToMarkdown(block.heading_1.children))
+        }
         break
       case 'heading_2':
         lines.push(`## ${richTextToMarkdown(block.heading_2.rich_text)}`)
+        if (block.heading_2.children?.length > 0) {
+          lines.push(blocksToMarkdown(block.heading_2.children))
+        }
         break
       case 'heading_3':
         lines.push(`### ${richTextToMarkdown(block.heading_3.rich_text)}`)
+        if (block.heading_3.children?.length > 0) {
+          lines.push(blocksToMarkdown(block.heading_3.children))
+        }
         break
       case 'paragraph':
         lines.push(richTextToMarkdown(block.paragraph.rich_text))
         break
       case 'bulleted_list_item':
         lines.push(`- ${richTextToMarkdown(block.bulleted_list_item.rich_text)}`)
+        if (block.bulleted_list_item.children?.length > 0) {
+          lines.push(indentChildren(block.bulleted_list_item.children))
+        }
         break
       case 'numbered_list_item':
         lines.push(`1. ${richTextToMarkdown(block.numbered_list_item.rich_text)}`)
+        if (block.numbered_list_item.children?.length > 0) {
+          lines.push(indentChildren(block.numbered_list_item.children))
+        }
         break
       case 'to_do':
         lines.push(`- [${block.to_do.checked ? 'x' : ' '}] ${richTextToMarkdown(block.to_do.rich_text)}`)
+        if (block.to_do.children?.length > 0) {
+          lines.push(indentChildren(block.to_do.children))
+        }
         break
       case 'code':
         lines.push(`\`\`\`${block.code.language || ''}`)
@@ -275,6 +310,10 @@ export function blocksToMarkdown(blocks: NotionBlock[]): string {
         break
       case 'quote':
         lines.push(`> ${richTextToMarkdown(block.quote.rich_text)}`)
+        if (block.quote.children?.length > 0) {
+          const childMd = blocksToMarkdown(block.quote.children)
+          lines.push(childMd.replace(/^/gm, '> '))
+        }
         break
       case 'divider':
         lines.push('---')
@@ -283,11 +322,9 @@ export function blocksToMarkdown(blocks: NotionBlock[]): string {
         const calloutText = richTextToMarkdown(block.callout.rich_text)
         const calloutType = resolveCalloutType(block.callout)
         lines.push(`> [!${calloutType}] ${calloutText}`)
-        if (block.callout.children && block.callout.children.length > 0) {
+        if (block.callout.children?.length > 0) {
           const childMd = blocksToMarkdown(block.callout.children)
-          for (const childLine of childMd.split('\n')) {
-            lines.push(`> ${childLine}`)
-          }
+          lines.push(childMd.replace(/^/gm, '> '))
         }
         break
       }
@@ -383,6 +420,7 @@ export function parseRichText(text: string): RichText[] {
   let code = false
   let strikethrough = false
   let noMoreCloseBrackets = false
+  let noMoreMentionCloseBrackets = false
 
   const flushCurrent = () => {
     if (current) {
@@ -396,9 +434,13 @@ export function parseRichText(text: string): RichText[] {
     const next = text[i + 1]
 
     // Page mention @[Title](page-id-or-url) — must come before link handling
-    if (char === '@' && next === '[') {
+    // ⚡ Bolt: Added algorithmic short-circuiting to prevent O(N^2) lookaheads on pathological inputs
+    // with many `@[` but no `]`.
+    if (char === '@' && next === '[' && !noMoreMentionCloseBrackets) {
       const closeBracket = text.indexOf(']', i + 2)
-      if (closeBracket !== -1 && closeBracket + 1 < text.length && text[closeBracket + 1] === '(') {
+      if (closeBracket === -1) {
+        noMoreMentionCloseBrackets = true
+      } else if (closeBracket + 1 < text.length && text[closeBracket + 1] === '(') {
         const closeParen = text.indexOf(')', closeBracket + 2)
         if (closeParen !== -1) {
           flushCurrent()

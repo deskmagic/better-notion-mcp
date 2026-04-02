@@ -24,7 +24,7 @@ import { fileUploads } from './composite/file-uploads.js'
 import { pages } from './composite/pages.js'
 import { users } from './composite/users.js'
 import { workspace } from './composite/workspace.js'
-import { aiReadableMessage, NotionMCPError } from './helpers/errors.js'
+import { aiReadableMessage, findClosestMatch, NotionMCPError } from './helpers/errors.js'
 import { wrapToolResult } from './helpers/security.js'
 
 // Get docs directory path - works for both bundled CLI and unbundled code
@@ -53,12 +53,18 @@ const RESOURCES = [
 /**
  * 9 Tools covering ~95% of Official Notion API
  * Compressed descriptions for token optimization (~77% reduction)
+ *
+ * Decision tree for LLMs:
+ * - `pages` = page CRUD (create/read/update/archive standalone pages or database rows)
+ * - `databases` = DB schema, query rows, bulk row CRUD
+ * - `blocks` = content *within* a page (paragraphs, headings, lists, tables)
+ * - `workspace` = search across workspace, get workspace info
  */
 const TOOLS = [
   {
     name: 'pages',
     description:
-      'Page lifecycle: create, get, get_property, update, move, archive, restore, duplicate. Requires parent_id for create. Returns markdown content for get.',
+      'Page CRUD for individual pages and database rows.\n\nActions (required params -> optional):\n- create (parent_id -> title, content, properties, icon, cover)\n- get (page_id): returns markdown content\n- get_property (page_id, property_id)\n- update (page_id -> title, content, append_content, properties, icon, cover, archived)\n- move (page_id, parent_id)\n- archive (page_id) / restore (page_id)\n- duplicate (page_id -> parent_id)\n\nUse `databases` instead for querying or bulk row operations. Property format: simple values auto-convert — string for title/rich_text/select/status, number for number, boolean for checkbox, string[] for multi_select, ISO date "2025-01-15" for date. Example: properties: {"Name": "My Page", "Status": "In Progress", "Tags": ["tag1", "tag2"], "Due": "2025-06-01", "Count": 42, "Done": true}.',
     annotations: {
       title: 'Pages',
       readOnlyHint: false,
@@ -79,12 +85,12 @@ const TOOLS = [
         title: { type: 'string', description: 'Page title' },
         content: { type: 'string', description: 'Markdown content' },
         append_content: { type: 'string', description: 'Markdown to append' },
-        prepend_content: {
-          type: 'string',
-          description: '[Deprecated] Not supported by Notion API — use blocks tool to insert at specific position'
-        },
         parent_id: { type: 'string', description: 'Parent page or database ID' },
-        properties: { type: 'object', description: 'Page properties (for database pages)' },
+        properties: {
+          type: 'object',
+          description:
+            'Page properties (for database pages). Use simple values — auto-converted to Notion format. String: title/rich_text/select/status. Number: number. Boolean: checkbox. String[]: multi_select. ISO date string: date. Object with Notion structure: pass through as-is.'
+        },
         property_id: { type: 'string', description: 'Property ID (for get_property action)' },
         icon: {
           type: 'string',
@@ -114,7 +120,7 @@ const TOOLS = [
   {
     name: 'databases',
     description:
-      'Database operations: create, get, query, create_page, update_page, delete_page, create_data_source, update_data_source, update_database, list_templates. Accepts both database_id (from URL) and data_source_id (from workspace search) — auto-resolved. Databases contain data sources with schema and rows.',
+      'Database schema, query, and bulk row operations.\n\nActions (required params -> optional):\n- create (parent_id -> title, properties, is_inline, icon, cover)\n- get (database_id)\n- query (database_id -> filters, sorts, limit, search)\n- create_page (database_id, pages[{properties}])\n- update_page (database_id, page_id, page_properties)\n- delete_page (database_id, page_ids)\n- create_data_source / update_data_source / update_database / list_templates\n\nUse `pages` instead for single page CRUD. Accepts both database_id (from URL) and data_source_id (from workspace search) — auto-resolved.',
     annotations: {
       title: 'Databases',
       readOnlyHint: false,
@@ -177,7 +183,7 @@ const TOOLS = [
   {
     name: 'blocks',
     description:
-      'Block-level content: get, children, append, update, delete. Page IDs are valid block IDs. update only works on text blocks (paragraph, headings, lists, quote, to_do, code). Supports tables, toggles, callouts, images, equations via markdown.',
+      'Read and modify block-level content within pages.\n\nActions (required params -> optional):\n- get (block_id): retrieve single block\n- children (block_id): list child blocks\n- append (block_id, content): add markdown content\n- update (block_id, content): replace text block content\n- delete (block_id): remove block\n\nUse `pages` for page metadata/properties. Page IDs are valid block IDs. update only works on text blocks (paragraph, headings, lists, quote, to_do, code). Image/file blocks contain signed URLs (1h expiry).',
     annotations: {
       title: 'Blocks',
       readOnlyHint: false,
@@ -222,7 +228,7 @@ const TOOLS = [
   {
     name: 'users',
     description:
-      'User info: list, get, me, from_workspace. list requires admin permissions — if it fails, use from_workspace (extracts users from accessible pages).',
+      'Get user information.\n\nActions (required params):\n- list: all workspace users (requires admin permissions)\n- get (user_id): single user info\n- me: current bot/integration user\n- from_workspace: extract users from accessible pages (use if list fails)',
     annotations: {
       title: 'Users',
       readOnlyHint: true,
@@ -246,7 +252,7 @@ const TOOLS = [
   {
     name: 'workspace',
     description:
-      'Workspace: info, search. Search returns pages/databases shared with integration. Use filter.object for type.',
+      'Search workspace and get workspace info.\n\nActions (required params -> optional):\n- info: workspace name, plan, and bot user\n- search (-> query, filter.object="page"|"data_source", sort, limit): find pages/databases shared with integration',
     annotations: {
       title: 'Workspace',
       readOnlyHint: true,
@@ -288,7 +294,7 @@ const TOOLS = [
   {
     name: 'comments',
     description:
-      'Comments: list, get, create. Use page_id for new discussion, discussion_id for replies, comment_id for get.',
+      'Manage page comments.\n\nActions (required params -> optional):\n- list (page_id): all comments on a page\n- get (comment_id): single comment\n- create (content -> page_id for new discussion, discussion_id for reply)',
     annotations: {
       title: 'Comments',
       readOnlyHint: false,
@@ -310,7 +316,8 @@ const TOOLS = [
   },
   {
     name: 'content_convert',
-    description: 'Convert: markdown-to-blocks, blocks-to-markdown. Most tools handle markdown automatically.',
+    description:
+      'Convert between markdown and Notion block JSON. Directions: markdown-to-blocks (input: markdown string), blocks-to-markdown (input: JSON array of Notion blocks or JSON string). Most tools (pages, blocks) handle markdown automatically — use this only for preview/validation. Supported markdown: headings, lists, to-do, code blocks, blockquotes, dividers, callouts (> [!NOTE]), toggles (<details>), tables, images, bookmarks, embeds, equations ($$), columns (:::columns), [toc], [breadcrumb]. Inline: **bold**, *italic*, `code`, ~~strike~~, [link](url).',
     annotations: {
       title: 'Content Convert',
       readOnlyHint: true,
@@ -334,7 +341,7 @@ const TOOLS = [
   {
     name: 'file_uploads',
     description:
-      'File uploads: create, send, complete, retrieve, list. Upload files to Notion (max 20MB direct, multi-part for larger). Use base64 content for send.',
+      'Upload files to Notion.\n\nActions (required params -> optional):\n- create (filename -> content_type, mode="single"|"multi_part", number_of_parts)\n- send (file_upload_id, file_content -> part_number): base64-encoded content\n- complete (file_upload_id)\n- retrieve (file_upload_id)\n- list (-> limit)\n\nMax 20MB direct, multi-part for larger files.',
     annotations: {
       title: 'File Uploads',
       readOnlyHint: false,
@@ -495,12 +502,16 @@ export function registerTools(server: Server, notionClientFactory: () => Client)
           }
           break
         }
-        default:
+        default: {
+          const validTools = TOOLS.map((t) => t.name)
+          const closest = findClosestMatch(name, validTools)
+          const suggestion = closest ? ` Did you mean '${closest}'?` : ''
           throw new NotionMCPError(
-            `Unknown tool: ${name}`,
+            `Unknown tool: ${name}.${suggestion}`,
             'UNKNOWN_TOOL',
-            `Available tools: ${TOOLS.map((t) => t.name).join(', ')}`
+            `Available tools: ${validTools.join(', ')}`
           )
+        }
       }
 
       const jsonText = JSON.stringify(result, null, 2)
