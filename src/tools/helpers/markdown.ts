@@ -545,12 +545,16 @@ function richTextToMarkdown(richText: RichText[]): string {
     if (rt.type === 'mention' && rt.mention) {
       const title = rt.plain_text || rt.text?.content || 'Untitled'
       const id = rt.mention.page?.id || rt.mention.database?.id || ''
-      if (id) {
-        result += `@[${title}](${id})`
-        continue
-      }
-      // Fallback for other mention types (user, date, etc.)
-      result += title
+      let mentionText = id ? `@[${title}](${id})` : title
+
+      // Apply annotations (same as text elements)
+      const annotations = rt.annotations || ({} as any)
+      if (annotations.bold) mentionText = `**${mentionText}**`
+      if (annotations.italic) mentionText = `*${mentionText}*`
+      if (annotations.code) mentionText = `\`${mentionText}\``
+      if (annotations.strikethrough) mentionText = `~~${mentionText}~~`
+
+      result += mentionText
       continue
     }
 

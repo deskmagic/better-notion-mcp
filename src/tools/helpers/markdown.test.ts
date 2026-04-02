@@ -1842,7 +1842,159 @@ describe('richTextToMarkdown mention handling', () => {
       }
     ]
     const result = blocksToMarkdown(blocks)
-    expect(result).toContain('My Database')
+    expect(result).toBe('@[My Database](db123)')
+  })
+
+  it('should apply bold annotation to page mention', () => {
+    const blocks: NotionBlock[] = [
+      {
+        object: 'block',
+        type: 'paragraph',
+        paragraph: {
+          rich_text: [
+            {
+              type: 'mention',
+              mention: { page: { id: 'abc123' } },
+              plain_text: 'My Page',
+              href: 'https://www.notion.so/abc123',
+              annotations: {
+                bold: true,
+                italic: false,
+                strikethrough: false,
+                underline: false,
+                code: false,
+                color: 'default'
+              }
+            }
+          ],
+          color: 'default'
+        }
+      }
+    ]
+    expect(blocksToMarkdown(blocks)).toBe('**@[My Page](abc123)**')
+  })
+
+  it('should apply multiple annotations to mention', () => {
+    const blocks: NotionBlock[] = [
+      {
+        object: 'block',
+        type: 'paragraph',
+        paragraph: {
+          rich_text: [
+            {
+              type: 'mention',
+              mention: { page: { id: 'abc123' } },
+              plain_text: 'My Page',
+              href: 'https://www.notion.so/abc123',
+              annotations: {
+                bold: true,
+                italic: true,
+                strikethrough: false,
+                underline: false,
+                code: false,
+                color: 'default'
+              }
+            }
+          ],
+          color: 'default'
+        }
+      }
+    ]
+    expect(blocksToMarkdown(blocks)).toBe('***@[My Page](abc123)***')
+  })
+
+  it('should apply code annotation to mention', () => {
+    const blocks: NotionBlock[] = [
+      {
+        object: 'block',
+        type: 'paragraph',
+        paragraph: {
+          rich_text: [
+            {
+              type: 'mention',
+              mention: { page: { id: 'abc123' } },
+              plain_text: 'My Page',
+              href: 'https://www.notion.so/abc123',
+              annotations: {
+                bold: false,
+                italic: false,
+                strikethrough: false,
+                underline: false,
+                code: true,
+                color: 'default'
+              }
+            }
+          ],
+          color: 'default'
+        }
+      }
+    ]
+    expect(blocksToMarkdown(blocks)).toBe('`@[My Page](abc123)`')
+  })
+
+  it('should fallback to plain_text for user mention', () => {
+    const blocks: NotionBlock[] = [
+      {
+        object: 'block',
+        type: 'paragraph',
+        paragraph: {
+          rich_text: [
+            {
+              type: 'mention',
+              mention: { type: 'user', user: { id: 'user-123', name: 'John' } },
+              plain_text: 'John Doe',
+              href: null,
+              annotations: {
+                bold: false,
+                italic: false,
+                strikethrough: false,
+                underline: false,
+                code: false,
+                color: 'default'
+              }
+            }
+          ],
+          color: 'default'
+        }
+      }
+    ]
+    expect(blocksToMarkdown(blocks)).toBe('John Doe')
+  })
+
+  it('should fallback to plain_text for date mention', () => {
+    const blocks: NotionBlock[] = [
+      {
+        object: 'block',
+        type: 'paragraph',
+        paragraph: {
+          rich_text: [
+            {
+              type: 'mention',
+              mention: { type: 'date', date: { start: '2026-01-15' } },
+              plain_text: '2026-01-15',
+              href: null,
+              annotations: {
+                bold: false,
+                italic: false,
+                strikethrough: false,
+                underline: false,
+                code: false,
+                color: 'default'
+              }
+            }
+          ],
+          color: 'default'
+        }
+      }
+    ]
+    expect(blocksToMarkdown(blocks)).toBe('2026-01-15')
+  })
+
+  it('should round-trip page mention through parseRichText and richTextToMarkdown', () => {
+    const markdown = 'See @[My Page](abc123def456) for details'
+    const blocks = markdownToBlocks(markdown)
+    const result = blocksToMarkdown(blocks)
+    expect(result).toBe(markdown)
   })
 })
 
