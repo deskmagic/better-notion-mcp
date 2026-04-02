@@ -56,13 +56,22 @@ export async function startHttp() {
 
   const app = express()
 
-  // Trust reverse proxy headers (Caddy, CF) for express-rate-limit
-  app.set('trust proxy', true)
+  // Trust exactly 2 reverse proxies (Cloudflare + Caddy) for correct req.ip
+  app.set('trust proxy', 2)
+  app.disable('x-powered-by')
 
   // Rate limit MCP endpoints per IP
   const mcpRateLimit = rateLimit({
     windowMs: 60 * 1000,
     limit: 120,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false
+  })
+
+  // Rate limit OAuth endpoints per IP to prevent abuse/brute-force
+  const authRateLimit = rateLimit({
+    windowMs: 60 * 1000,
+    limit: 20, // Strict limit for auth endpoints
     standardHeaders: 'draft-7',
     legacyHeaders: false
   })
@@ -87,7 +96,7 @@ export async function startHttp() {
   // Notion OAuth callback relay
   // Notion redirects here after user authorizes. We exchange the code,
   // store the token, issue our own auth code, and redirect to MCP client.
-  app.get('/callback', async (req, res) => {
+  app.get('/callback', authRateLimit, async (req, res) => {
     const { code, state, error } = req.query as Record<string, string>
 
     if (error) {
@@ -274,7 +283,7 @@ export async function startHttp() {
   })
 
   app.listen(config.port, '0.0.0.0', () => {
-    console.log(`Remote MCP server listening on port ${config.port}`)
-    console.log(`Public URL: ${config.publicUrl}`)
+    console.info(`Remote MCP server listening on port ${config.port}`)
+    console.info(`Public URL: ${config.publicUrl}`)
   })
 }

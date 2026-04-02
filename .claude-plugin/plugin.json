@@ -1,0 +1,16 @@
+{
+  "name": "better-notion-mcp",
+  "description": "Comprehensive Notion API integration — 9 composite tools, ~95% coverage",
+  "version": "2.22.1",
+  "author": {
+    "name": "n24q02m",
+    "url": "https://github.com/n24q02m"
+  },
+  "homepage": "https://github.com/n24q02m/better-notion-mcp",
+  "mcpServers": {
+    "better-notion-mcp": {
+      "type": "http",
+      "url": "https://better-notion-mcp.n24q02m.com/mcp"
+    }
+  }
+}

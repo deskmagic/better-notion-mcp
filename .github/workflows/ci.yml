@@ -3,65 +3,29 @@ name: CI
 on:
   pull_request:
     branches: [main]
-    types:
-      - opened
-      - synchronize
-      - reopened
-      - ready_for_review
+    types: [opened, synchronize, reopened, ready_for_review]
+  pull_request_target:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
   issue_comment:
-    types:
-      - created
-      - edited
+    types: [created, edited]
   issues:
-    types:
-      - opened
-      - reopened
+    types: [opened, reopened]
 permissions:
   contents: read
   pull-requests: write
 
 jobs:
-  pr-title-check:
-    name: PR Title Check
-    if: >-
-      github.event_name == 'pull_request'
-      && github.event.sender.type != 'Bot'
-    runs-on: ubuntu-latest
-    permissions:
-      pull-requests: write
-    steps:
-      - name: Harden Runner
-        uses: step-security/harden-runner@58077d3c7e43986b6b15fba718e8ea69e387dfcc # v2
-        with:
-          egress-policy: audit
-
-      - name: Validate and auto-fix PR title
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          title=$(gh pr view ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --json title -q .title)
-          if [[ "$title" =~ ^(feat|fix)(\(.+\))?:.+ ]] || [[ "$title" =~ ^chore\(release\):.+ ]]; then
-            echo "Title is valid: $title"
-            exit 0
-          fi
-          clean=$(echo "$title" | sed -E 's/^[^a-zA-Z]*//; s/^(Bolt|Sentinel|Guard|Shield): *(\[.*\] *)?//')
-          if echo "$clean" | grep -qiE 'fix|bug|vulnerability|security|patch|resolve|crash|error'; then
-            new_title="fix: $(echo "$clean" | sed 's/^./\L&/')"
-          else
-            new_title="feat: $(echo "$clean" | sed 's/^./\L&/')"
-          fi
-          gh pr edit ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --title "$new_title"
-          echo "Auto-fixed: $title -> $new_title"
   lint-and-test:
     name: Lint, Test & Build
-    if: github.event_name != 'issues'
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
     runs-on: ubuntu-latest
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@58077d3c7e43986b6b15fba718e8ea69e387dfcc # v2
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2
         with:
           egress-policy: audit
 
@@ -69,7 +33,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Setup bun
-        uses: oven-sh/setup-bun@ecf28ddc73e819eb6fa29df6b34ef8921c743461 # v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
 
       - name: Setup Node.js 24
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
@@ -87,10 +51,9 @@ jobs:
 
       - name: Upload coverage to Codecov
         if: github.event_name == 'push'
-        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5
+        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6
         with:
           files: coverage/lcov.info
-          token: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Build project
         run: bun run build
@@ -102,7 +65,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@58077d3c7e43986b6b15fba718e8ea69e387dfcc # v2
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2
         with:
           egress-policy: audit
 
@@ -122,7 +85,7 @@ jobs:
         github.event_name == 'issue_comment'
         && github.event.sender.type != 'Bot'
       ) || (
-        github.event_name == 'pull_request'
+        github.event_name == 'pull_request_target'
         && github.event.sender.type != 'Bot'
         && github.event.pull_request.user.login != 'n24q02m'
       )
@@ -131,6 +94,7 @@ jobs:
       issues: write
       pull-requests: write
       contents: read
+      id-token: write
     steps:
       - name: Checkout repo
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -145,11 +109,18 @@ jobs:
             echo "$RANDOM_EOF" >> "$GITHUB_ENV"
           fi
 
+      - name: Authenticate to GCP (Vertex AI)
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ vars.VERTEX_WIF_PROVIDER }}
+          service_account: ${{ vars.VERTEX_SERVICE_ACCOUNT }}
+
       - name: PR Agent action step
-        uses: qodo-ai/pr-agent@main
+        uses: qodo-ai/pr-agent@42d55d4182a4839820b11b6c4d06fce855970301 # main
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          VERTEXAI_PROJECT: ${{ vars.VERTEX_PROJECT }}
+          VERTEXAI_LOCATION: global
           PR_REVIEWER__EXTRA_INSTRUCTIONS: ${{ env.CUSTOM_INSTRUCTIONS }}
           PR_CODE_SUGGESTIONS__EXTRA_INSTRUCTIONS: ${{ env.CUSTOM_INSTRUCTIONS }}
           PR_DESCRIPTION__EXTRA_INSTRUCTIONS: ${{ env.CUSTOM_INSTRUCTIONS }}
@@ -164,30 +135,37 @@ jobs:
   email-notify:
     name: Email Notification
     if: >-
-      (github.event_name == 'issues' || github.event_name == 'pull_request')
+      (github.event_name == 'issues' || github.event_name == 'pull_request_target')
       && github.actor != 'n24q02m'
       && github.event.sender.type != 'Bot'
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@58077d3c7e43986b6b15fba718e8ea69e387dfcc # v2
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2
         with:
           egress-policy: audit
 
+      - name: Parse SMTP credential
+        run: |
+          echo "SMTP_USER=${SMTP_CREDENTIAL%%:*}" >> $GITHUB_ENV
+          echo "SMTP_PASS=${SMTP_CREDENTIAL#*:}" >> $GITHUB_ENV
+        env:
+          SMTP_CREDENTIAL: ${{ secrets.SMTP_CREDENTIAL }}
+
       - name: Send email notification
-        uses: dawidd6/action-send-mail@e9d44227e5ff9b5be74ac40a69c554324ded2e5b # v13
+        uses: dawidd6/action-send-mail@d38f3f7cd391cdebfe0d38efc3998b935e951c4f # v16
         with:
           server_address: smtp.gmail.com
           server_port: 587
-          username: ${{ secrets.SMTP_USERNAME }}
-          password: ${{ secrets.SMTP_PASSWORD }}
+          username: ${{ env.SMTP_USER }}
+          password: ${{ env.SMTP_PASS }}
           subject: >-
             [${{ github.event.repository.name }}]
             ${{ github.event_name == 'issues' && 'Issue' || 'PR' }}
             #${{ github.event.issue.number || github.event.pull_request.number }}:
             ${{ github.event.issue.title || github.event.pull_request.title }}
-          to: ${{ secrets.NOTIFY_EMAIL }}
-          from: GitHub Notify <${{ secrets.SMTP_USERNAME }}>
+          to: ${{ env.SMTP_USER }}
+          from: GitHub Notify <${{ env.SMTP_USER }}>
           body: |
             ${{ github.event_name == 'issues' && 'New issue' || 'New pull request' }} in ${{ github.repository }}
 

@@ -64,7 +64,21 @@ function sanitizeErrorDetails(error: any): any {
   return safe
 }
 
-/**
+function stripSensitiveFields(obj: any, seen = new WeakSet()): void {
+  if (!obj || typeof obj !== 'object') return
+  if (seen.has(obj)) return
+  seen.add(obj)
+
+  delete obj.sensitive_token
+  delete obj.internal_config
+  delete obj.user_email
+
+  for (const key of Object.keys(obj)) {
+    if (typeof obj[key] === 'object' && obj[key] !== null) {
+      stripSensitiveFields(obj[key], seen)
+    }
+  }
+}
 
 /**
  * Enhance Notion API error with helpful context
@@ -72,6 +86,9 @@ function sanitizeErrorDetails(error: any): any {
 export function enhanceError(error: any): NotionMCPError {
   // Already a NotionMCPError — pass through unchanged
   if (error instanceof NotionMCPError) return error
+
+  // Explicitly strip sensitive fields recursively
+  stripSensitiveFields(error)
 
   // Notion API error
   if (error.code) {
@@ -125,13 +142,26 @@ function handleNotionError(error: any): NotionMCPError {
         'Check the ID is correct. For databases: use the database container ID (from URL), not the data_source ID (from search). If you got this ID from workspace search, try databases/get first to resolve the correct ID.'
       )
 
-    case 'validation_error':
+    case 'validation_error': {
+      const bodyMessage: string = error.body?.message || ''
+      let suggestion = 'Check the API documentation for valid parameter formats'
+
+      // Detect common property format mistakes and provide specific guidance
+      if (bodyMessage.includes('rich_text') || bodyMessage.includes('title')) {
+        suggestion =
+          'Property format error. For database page properties, use simple values: {"Name": "text", "Status": "value", "Tags": ["a","b"], "Count": 42, "Done": true, "Due": "2025-01-15"}. The server auto-converts to Notion format.'
+      } else if (bodyMessage.includes('property')) {
+        suggestion =
+          'Property name or type mismatch. Use databases(action="get") to check the schema, then match property names exactly (case-sensitive).'
+      }
+
       return new NotionMCPError(
-        error.body?.message || 'Invalid request parameters',
+        bodyMessage || 'Invalid request parameters',
         'VALIDATION_ERROR',
-        'Check the API documentation for valid parameter formats',
+        suggestion,
         sanitizeValidationBody(error.body)
       )
+    }
 
     case 'rate_limited':
       return new NotionMCPError(
@@ -157,6 +187,43 @@ function handleNotionError(error: any): NotionMCPError {
     default:
       return new NotionMCPError(message, code.toUpperCase(), 'Check the Notion API documentation for this error code')
   }
+}
+
+/**
+ * Find the closest matching string from a list of valid options.
+ * Uses Levenshtein-like similarity (simple character overlap).
+ */
+export function findClosestMatch(input: string, validOptions: string[]): string | null {
+  if (!input || validOptions.length === 0) return null
+
+  const lower = input.toLowerCase()
+  let bestMatch: string | null = null
+  let bestScore = 0
+
+  for (const option of validOptions) {
+    const optionLower = option.toLowerCase()
+    // Check prefix match first
+    if (optionLower.startsWith(lower) || lower.startsWith(optionLower)) {
+      return option
+    }
+    // Simple bigram similarity
+    const inputBigrams = new Set<string>()
+    for (let i = 0; i < lower.length - 1; i++) inputBigrams.add(lower.slice(i, i + 2))
+    const optionBigrams = new Set<string>()
+    for (let i = 0; i < optionLower.length - 1; i++) optionBigrams.add(optionLower.slice(i, i + 2))
+
+    let overlap = 0
+    for (const b of inputBigrams) {
+      if (optionBigrams.has(b)) overlap++
+    }
+    const score = (2 * overlap) / (inputBigrams.size + optionBigrams.size)
+    if (score > bestScore && score > 0.4) {
+      bestScore = score
+      bestMatch = option
+    }
+  }
+
+  return bestMatch
 }
 
 /**
@@ -225,10 +292,10 @@ export function suggestFixes(error: NotionMCPError): string[] {
 /**
  * Wrap async function with error handling
  */
-export function withErrorHandling<T extends (...args: any[]) => Promise<any>>(
-  fn: T
-): (...args: Parameters<T>) => Promise<ReturnType<T>> {
-  return async (...args: Parameters<T>): Promise<ReturnType<T>> => {
+export function withErrorHandling<Args extends unknown[], Return>(
+  fn: (...args: Args) => Promise<Return>
+): (...args: Args) => Promise<Return> {
+  return async (...args: Args): Promise<Return> => {
     try {
       return await fn(...args)
     } catch (error) {
