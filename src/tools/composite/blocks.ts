@@ -6,16 +6,14 @@
 import type { Client } from '@notionhq/client'
 import { NotionMCPError, withErrorHandling } from '../helpers/errors.js'
 import { blocksToMarkdown, collectMentionIds, markdownToBlocks, replaceMentionTitles } from '../helpers/markdown.js'
-import { autoPaginate, fetchChildrenRecursive } from '../helpers/pagination.js'
+import { autoPaginate, populateDeepChildren } from '../helpers/pagination.js'
 
 export interface BlocksInput {
   action: 'get' | 'children' | 'append' | 'update' | 'delete'
   block_id: string
   content?: string // Markdown format
-  position?: {
-    type: 'start' | 'after_block' | 'end'
-    after_block?: { id: string }
-  }
+  position?: 'start' | 'end' | 'after_block'
+  after_block_id?: string
 }
 
 /**
@@ -51,11 +49,7 @@ export async function blocks(notion: Client, input: BlocksInput): Promise<any> {
         )
 
         // Recursively fetch children for blocks that need them (tables, toggles, columns)
-        await fetchChildrenRecursive(blocksList as any[], async (blockId) => {
-          return autoPaginate((cursor) =>
-            notion.blocks.children.list({ block_id: blockId, start_cursor: cursor, page_size: 100 })
-          ) as any
-        })
+        await populateDeepChildren(notion, blocksList as any[])
 
         // Resolve stale mention titles (plain_text === 'Untitled') by batch-fetching page titles
         const mentionIds = collectMentionIds(blocksList as any[])
@@ -95,12 +89,24 @@ export async function blocks(notion: Client, input: BlocksInput): Promise<any> {
         if (!input.content) {
           throw new NotionMCPError('content required for append', 'VALIDATION_ERROR', 'Provide markdown content')
         }
+        if (input.position === 'after_block' && !input.after_block_id) {
+          throw new NotionMCPError(
+            'after_block_id required when position is after_block',
+            'VALIDATION_ERROR',
+            'Provide after_block_id with the block ID to insert after'
+          )
+        }
         const blocksList = markdownToBlocks(input.content)
-        await notion.blocks.children.append({
+        const appendParams: any = {
           block_id: input.block_id,
-          children: blocksList as any,
-          ...(input.position && { position: input.position as any })
-        })
+          children: blocksList as any
+        }
+        if (input.position === 'start') {
+          appendParams.position = { type: 'start' }
+        } else if (input.position === 'after_block' && input.after_block_id) {
+          appendParams.position = { type: 'after_block', after_block: { id: input.after_block_id } }
+        }
+        await notion.blocks.children.append(appendParams)
         return {
           action: 'append',
           block_id: input.block_id,

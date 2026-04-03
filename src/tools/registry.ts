@@ -3,7 +3,7 @@
  * Consolidated registration for maximum coverage with minimal tools
  */
 
-import { readFileSync } from 'node:fs'
+import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js'
@@ -183,7 +183,7 @@ const TOOLS = [
   {
     name: 'blocks',
     description:
-      'Read and modify block-level content within pages.\n\nActions (required params -> optional):\n- get (block_id): retrieve single block\n- children (block_id): list child blocks\n- append (block_id, content): add markdown content\n- update (block_id, content): replace text block content\n- delete (block_id): remove block\n\nUse `pages` for page metadata/properties. Page IDs are valid block IDs. update only works on text blocks (paragraph, headings, lists, quote, to_do, code). Image/file blocks contain signed URLs (1h expiry).',
+      'Read and modify block-level content within pages.\n\nActions (required params -> optional):\n- get (block_id): retrieve single block\n- children (block_id): list child blocks\n- append (block_id, content -> position, after_block_id): add markdown content at position\n- update (block_id, content): replace text block content\n- delete (block_id): remove block\n\nUse `pages` for page metadata/properties. Page IDs are valid block IDs. update only works on text blocks (paragraph, headings, lists, quote, to_do, code). Image/file blocks contain signed URLs (1h expiry). append supports position: "start" (prepend), "end" (default), "after_block" (requires after_block_id).',
     annotations: {
       title: 'Blocks',
       readOnlyHint: false,
@@ -202,25 +202,12 @@ const TOOLS = [
         block_id: { type: 'string', description: 'Block ID' },
         content: { type: 'string', description: 'Markdown content (for append/update)' },
         position: {
-          type: 'object',
-          description: 'Insert position (append only). Omit to append at end.',
-          properties: {
-            type: {
-              type: 'string',
-              enum: ['start', 'after_block'],
-              description: 'Position type: "start" for beginning, "after_block" for after a specific block'
-            },
-            after_block: {
-              type: 'object',
-              description: 'Required when type is "after_block"',
-              properties: {
-                id: { type: 'string', description: 'Block ID to insert after' }
-              },
-              required: ['id']
-            }
-          },
-          required: ['type']
-        }
+          type: 'string',
+          enum: ['start', 'end', 'after_block'],
+          description:
+            'Insert position for append: start (prepend), end (default), after_block (requires after_block_id)'
+        },
+        after_block_id: { type: 'string', description: 'Block ID to insert after (when position is after_block)' }
       },
       required: ['action', 'block_id']
     }
@@ -429,7 +416,7 @@ export function registerTools(server: Server, notionClientFactory: () => Client)
     }
 
     try {
-      const content = readFileSync(join(DOCS_DIR, resource.file), 'utf-8')
+      const content = await readFile(join(DOCS_DIR, resource.file), 'utf-8')
       return {
         contents: [{ uri, mimeType: 'text/markdown', text: content }]
       }
@@ -495,7 +482,7 @@ export function registerTools(server: Server, notionClientFactory: () => Client)
           }
           const docFile = `${toolName}.md`
           try {
-            const content = readFileSync(join(DOCS_DIR, docFile), 'utf-8')
+            const content = await readFile(join(DOCS_DIR, docFile), 'utf-8')
             result = { tool: toolName, documentation: content }
           } catch {
             throw new NotionMCPError(`Documentation not found for: ${toolName}`, 'DOC_NOT_FOUND', 'Check tool_name')

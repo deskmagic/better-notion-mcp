@@ -9,7 +9,7 @@ import { NotionMCPError, withErrorHandling } from '../helpers/errors.js'
 import { formatIcon, resolveIcon } from '../helpers/icons.js'
 import { isValidBase64 } from '../helpers/id.js'
 import { blocksToMarkdown, collectMentionIds, markdownToBlocks, replaceMentionTitles } from '../helpers/markdown.js'
-import { autoPaginate, fetchChildrenRecursive, processBatches } from '../helpers/pagination.js'
+import { autoPaginate, populateDeepChildren, processBatches } from '../helpers/pagination.js'
 import { convertToNotionProperties, extractPageProperties } from '../helpers/properties.js'
 import * as RichText from '../helpers/richtext.js'
 
@@ -24,11 +24,11 @@ export interface GetPageResult {
   action: 'get'
   page_id: string
   url: string
-  icon: any | null
-  cover: any | null
   created_time: string
   last_edited_time: string
   archived: boolean
+  icon: any
+  cover: any
   properties: Record<string, any>
   content: string
   block_count: number
@@ -303,11 +303,7 @@ async function getPage(notion: Client, input: PagesInput): Promise<GetPageResult
   )
 
   // Recursively fetch children for blocks that need them (tables, toggles, columns)
-  await fetchChildrenRecursive(blocks as any[], async (blockId) => {
-    return autoPaginate((cursor) =>
-      notion.blocks.children.list({ block_id: blockId, start_cursor: cursor, page_size: 100 })
-    ) as any
-  })
+  await populateDeepChildren(notion, blocks as any[])
 
   // Resolve stale mention titles (plain_text === 'Untitled') by batch-fetching page titles
   const mentionIds = collectMentionIds(blocks as any[])
@@ -343,11 +339,11 @@ async function getPage(notion: Client, input: PagesInput): Promise<GetPageResult
     action: 'get',
     page_id: page.id,
     url: page.url,
-    icon: page.icon || null,
-    cover: page.cover || null,
     created_time: page.created_time,
     last_edited_time: page.last_edited_time,
     archived: page.archived,
+    icon: page.icon || null,
+    cover: page.cover || null,
     properties,
     content: markdown,
     block_count: blocks.length
@@ -665,6 +661,16 @@ async function duplicatePage(notion: Client, input: PagesInput): Promise<Duplica
             object,
             ...rest
           } = block
+          // Strip null values inside block type data (e.g., paragraph.icon: null)
+          // Notion API rejects null where it expects object or undefined
+          const blockType = rest.type
+          if (blockType && rest[blockType] && typeof rest[blockType] === 'object') {
+            for (const key of Object.keys(rest[blockType])) {
+              if (rest[blockType][key] === null) {
+                delete rest[blockType][key]
+              }
+            }
+          }
           return rest
         })
         await notion.blocks.children.append({

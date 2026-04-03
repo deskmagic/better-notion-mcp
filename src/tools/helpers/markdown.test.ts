@@ -1746,6 +1746,22 @@ describe('blocksToMarkdown', () => {
     })
   })
 
+  describe('child page and database blocks', () => {
+    it('should render child_page as link', () => {
+      const blocks: NotionBlock[] = [
+        { object: 'block', type: 'child_page', id: 'page-123', child_page: { title: 'My Sub Page' } }
+      ]
+      expect(blocksToMarkdown(blocks)).toBe('[My Sub Page](page-123)')
+    })
+
+    it('should render child_database as link', () => {
+      const blocks: NotionBlock[] = [
+        { object: 'block', type: 'child_database', id: 'db-456', child_database: { title: 'Tasks DB' } }
+      ]
+      expect(blocksToMarkdown(blocks)).toBe('[Tasks DB](db-456)')
+    })
+  })
+
   describe('unsupported block types', () => {
     it('should skip unknown block types', () => {
       const blocks: NotionBlock[] = [
