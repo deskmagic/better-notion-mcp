@@ -13,8 +13,82 @@ import { convertToNotionProperties, extractPageProperties } from '../helpers/pro
 import * as RichText from '../helpers/richtext.js'
 
 // Cache for data source schema (properties)
-const schemaCache = new Map<string, { properties: any; expiresAt: number }>()
+export const schemaCache = new Map<string, { properties: any; expiresAt: number }>()
 const SCHEMA_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+
+/**
+ * Get data source properties with caching
+ */
+async function getDataSourceSchema(notion: Client, dataSourceId: string): Promise<any> {
+  const cached = schemaCache.get(dataSourceId)
+  if (cached && Date.now() < cached.expiresAt) {
+    return cached.properties
+  }
+
+  const dataSource: any = await (notion as any).dataSources.retrieve({
+    data_source_id: dataSourceId
+  })
+  const properties = dataSource.properties
+
+  if (properties) {
+    schemaCache.set(dataSourceId, {
+      properties,
+      expiresAt: Date.now() + SCHEMA_CACHE_TTL
+    })
+  }
+
+  return properties
+}
+
+/**
+ * Build a filter that searches across all title and rich_text properties
+ */
+function buildSearchFilter(properties: any, search: string): any | null {
+  const textProps = []
+  if (properties) {
+    for (const name of Object.keys(properties)) {
+      const prop = properties[name]
+      if (['title', 'rich_text'].includes(prop.type)) {
+        textProps.push(name)
+      }
+    }
+  }
+
+  if (textProps.length > 0) {
+    return {
+      or: textProps.map((propName) => ({
+        property: propName,
+        rich_text: { contains: search }
+      }))
+    }
+  }
+
+  return null
+}
+
+/**
+ * Get search filter for text properties
+ */
+async function getSmartSearchFilter(notion: Client, dataSourceId: string, search: string): Promise<any | null> {
+  const properties = await getDataSourceSchema(notion, dataSourceId)
+  return buildSearchFilter(properties, search)
+}
+
+/**
+ * Format raw Notion page results into AI-friendly property objects
+ */
+function formatDatabaseResults(results: any[]): Record<string, any>[] {
+  const formattedResults = new Array(results.length)
+  for (let i = 0; i < results.length; i++) {
+    const page: any = results[i]
+    const props = extractPageProperties(page.properties)
+    props.page_id = page.id
+    props.url = page.url
+
+    formattedResults[i] = props
+  }
+  return formattedResults
+}
 
 export interface DatabasesInput {
   action:
@@ -321,18 +395,17 @@ async function getDatabase(notion: Client, input: DatabasesInput): Promise<GetDa
   let dataSourceInfo: any = null
 
   if (database.data_sources && database.data_sources.length > 0) {
-    const dataSource: any = await (notion as any).dataSources.retrieve({
-      data_source_id: database.data_sources[0].id
-    })
+    const dataSourceId = database.data_sources[0].id
+    const properties = await getDataSourceSchema(notion, dataSourceId)
 
     dataSourceInfo = {
-      id: dataSource.id,
-      name: dataSource.title?.[0]?.plain_text || database.data_sources[0].name
+      id: dataSourceId,
+      name: database.data_sources[0].name
     }
 
     // Format properties for AI-friendly output
-    if (dataSource.properties) {
-      for (const [name, prop] of Object.entries(dataSource.properties)) {
+    if (properties) {
+      for (const [name, prop] of Object.entries(properties)) {
         const p = prop as any
         schema[name] = {
           type: p.type,
@@ -384,43 +457,7 @@ async function queryDatabase(notion: Client, input: DatabasesInput): Promise<Que
 
   // Smart search across text properties
   if (input.search && !filter) {
-    let properties: any
-
-    const cached = schemaCache.get(dataSourceId)
-    if (cached && Date.now() < cached.expiresAt) {
-      properties = cached.properties
-    } else {
-      const dataSource: any = await (notion as any).dataSources.retrieve({
-        data_source_id: dataSourceId
-      })
-      properties = dataSource.properties
-
-      if (properties) {
-        schemaCache.set(dataSourceId, {
-          properties,
-          expiresAt: Date.now() + SCHEMA_CACHE_TTL
-        })
-      }
-    }
-
-    const textProps = []
-    if (properties) {
-      for (const name of Object.keys(properties)) {
-        const prop = (properties as any)[name]
-        if (['title', 'rich_text'].includes(prop.type)) {
-          textProps.push(name)
-        }
-      }
-    }
-
-    if (textProps.length > 0) {
-      filter = {
-        or: textProps.map((propName) => ({
-          property: propName,
-          rich_text: { contains: input.search }
-        }))
-      }
-    }
+    filter = await getSmartSearchFilter(notion, dataSourceId, input.search)
   }
 
   const queryParams: any = { data_source_id: dataSourceId }
@@ -445,15 +482,7 @@ async function queryDatabase(notion: Client, input: DatabasesInput): Promise<Que
   const results = input.limit ? allResults.slice(0, input.limit) : allResults
 
   // Format results
-  const formattedResults = new Array(results.length)
-  for (let i = 0; i < results.length; i++) {
-    const page: any = results[i]
-    const props = extractPageProperties(page.properties)
-    props.page_id = page.id
-    props.url = page.url
-
-    formattedResults[i] = props
-  }
+  const formattedResults = formatDatabaseResults(results)
 
   return {
     action: 'query',
@@ -481,12 +510,10 @@ async function createDatabasePages(notion: Client, input: DatabasesInput): Promi
   const { databaseId, dataSourceId } = await resolveDataSourceId(notion, input.database_id)
 
   // Fetch schema for property type mapping
-  const dataSource: any = await (notion as any).dataSources.retrieve({
-    data_source_id: dataSourceId
-  })
+  const properties = await getDataSourceSchema(notion, dataSourceId)
   const schema: Record<string, string> = {}
-  if (dataSource.properties) {
-    for (const [name, prop] of Object.entries(dataSource.properties)) {
+  if (properties) {
+    for (const [name, prop] of Object.entries(properties)) {
       schema[name] = (prop as any).type
     }
   }

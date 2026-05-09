@@ -1,11 +1,9 @@
 /**
- * Error Handling Utilities
- * AI-friendly error messages and suggestions
+ * Custom error class for Notion MCP operations
  */
-
 export class NotionMCPError extends Error {
   constructor(
-    message: string,
+    public message: string,
     public code: string,
     public suggestion?: string,
     public details?: any
@@ -73,11 +71,129 @@ function stripSensitiveFields(obj: any, seen = new WeakSet()): void {
   delete obj.internal_config
   delete obj.user_email
 
+  // Also strip authorization headers to prevent leaking tokens
+  if (obj.headers?.Authorization) delete obj.headers.Authorization
+  if (obj.headers?.authorization) delete obj.headers.authorization
+  if (obj.request?._headers?.authorization) delete obj.request._headers.authorization
+  if (obj.config?.headers?.Authorization) delete obj.config.headers.Authorization
+  if (obj.config?.headers?.authorization) delete obj.config.headers.authorization
+
   for (const key of Object.keys(obj)) {
     if (typeof obj[key] === 'object' && obj[key] !== null) {
       stripSensitiveFields(obj[key], seen)
     }
   }
+}
+
+/**
+ * Map network-related errors
+ */
+function mapNetworkError(error: any): NotionMCPError | null {
+  if (error.message?.includes('ECONNREFUSED') || error.message?.includes('ENOTFOUND')) {
+    return new NotionMCPError(
+      'Cannot connect to Notion API',
+      'NETWORK_ERROR',
+      'Check your internet connection and try again'
+    )
+  }
+  return null
+}
+
+/**
+ * Handle validation_error separately as it has dynamic suggestions
+ */
+function mapValidationError(error: any): NotionMCPError | null {
+  if (error.code !== 'validation_error') return null
+
+  const bodyMessage: string = error.body?.message || ''
+  let suggestion = 'Check the API documentation for valid parameter formats'
+
+  // Detect common property format mistakes and provide specific guidance
+  if (bodyMessage.includes('rich_text') || bodyMessage.includes('title')) {
+    suggestion =
+      'Property format error. For database page properties, use simple values: {"Name": "text", "Status": "value", "Tags": ["a","b"], "Count": 42, "Done": true, "Due": "2025-01-15"}. The server auto-converts to Notion format.'
+  } else if (bodyMessage.includes('property')) {
+    suggestion =
+      'Property name or type mismatch. Use databases(action="get") to check the schema, then match property names exactly (case-sensitive).'
+  }
+
+  return new NotionMCPError(
+    bodyMessage || 'Invalid request parameters',
+    'VALIDATION_ERROR',
+    suggestion,
+    sanitizeValidationBody(error.body)
+  )
+}
+
+/**
+ * Static mapping of Notion API error codes to MCP error details
+ */
+const NOTION_ERROR_MAP: Record<string, { message: string; code: string; suggestion: string }> = {
+  unauthorized: {
+    message: 'Invalid or missing Notion API token',
+    code: 'UNAUTHORIZED',
+    suggestion:
+      'Set NOTION_TOKEN environment variable with a valid integration token from https://www.notion.so/my-integrations'
+  },
+  restricted_resource: {
+    message: 'Integration does not have access to this resource',
+    code: 'RESTRICTED_RESOURCE',
+    suggestion:
+      'Share the page/database with your integration in Notion settings. For users/list: try the from_workspace action instead (extracts users from accessible pages).'
+  },
+  object_not_found: {
+    message: 'Page or database not found',
+    code: 'NOT_FOUND',
+    suggestion:
+      'Check the ID is correct. For databases: use the database container ID (from URL), not the data_source ID (from search). If you got this ID from workspace search, try databases/get first to resolve the correct ID.'
+  },
+  rate_limited: {
+    message: 'Too many requests to Notion API',
+    code: 'RATE_LIMITED',
+    suggestion: 'Wait a few seconds and try again. Consider batching operations.'
+  },
+  conflict_error: {
+    message: 'Conflict with existing data',
+    code: 'CONFLICT',
+    suggestion: 'The resource may have been modified. Refresh and try again.'
+  },
+  service_unavailable: {
+    message: 'Notion API is temporarily unavailable',
+    code: 'SERVICE_UNAVAILABLE',
+    suggestion: 'Wait a moment and try again. Check https://status.notion.so for updates.'
+  }
+}
+
+/**
+ * Map Notion API errors
+ */
+function mapNotionError(error: any): NotionMCPError | null {
+  if (!error.code) return null
+
+  const validationError = mapValidationError(error)
+  if (validationError) return validationError
+
+  const code = error.code
+  const message = error.message || 'Unknown Notion API error'
+  const mapping = NOTION_ERROR_MAP[code]
+
+  if (mapping) {
+    return new NotionMCPError(mapping.message, mapping.code, mapping.suggestion)
+  }
+
+  return new NotionMCPError(message, code.toUpperCase(), 'Check the Notion API documentation for this error code')
+}
+
+/**
+ * Map all other errors
+ */
+function mapGenericError(error: any): NotionMCPError {
+  return new NotionMCPError(
+    error.message || 'Unknown error occurred',
+    'UNKNOWN_ERROR',
+    'Please check your request and try again',
+    sanitizeErrorDetails(error)
+  )
 }
 
 /**
@@ -90,103 +206,8 @@ export function enhanceError(error: any): NotionMCPError {
   // Explicitly strip sensitive fields recursively
   stripSensitiveFields(error)
 
-  // Notion API error
-  if (error.code) {
-    return handleNotionError(error)
-  }
-
-  // Network error
-  if (error.message?.includes('ECONNREFUSED') || error.message?.includes('ENOTFOUND')) {
-    return new NotionMCPError(
-      'Cannot connect to Notion API',
-      'NETWORK_ERROR',
-      'Check your internet connection and try again'
-    )
-  }
-
-  // Generic error
-  return new NotionMCPError(
-    error.message || 'Unknown error occurred',
-    'UNKNOWN_ERROR',
-    'Please check your request and try again',
-    sanitizeErrorDetails(error)
-  )
-}
-
-/**
- * Handle specific Notion API errors
- */
-function handleNotionError(error: any): NotionMCPError {
-  const code = error.code
-  const message = error.message || 'Unknown Notion API error'
-
-  switch (code) {
-    case 'unauthorized':
-      return new NotionMCPError(
-        'Invalid or missing Notion API token',
-        'UNAUTHORIZED',
-        'Set NOTION_TOKEN environment variable with a valid integration token from https://www.notion.so/my-integrations'
-      )
-
-    case 'restricted_resource':
-      return new NotionMCPError(
-        'Integration does not have access to this resource',
-        'RESTRICTED_RESOURCE',
-        'Share the page/database with your integration in Notion settings. For users/list: try the from_workspace action instead (extracts users from accessible pages).'
-      )
-
-    case 'object_not_found':
-      return new NotionMCPError(
-        'Page or database not found',
-        'NOT_FOUND',
-        'Check the ID is correct. For databases: use the database container ID (from URL), not the data_source ID (from search). If you got this ID from workspace search, try databases/get first to resolve the correct ID.'
-      )
-
-    case 'validation_error': {
-      const bodyMessage: string = error.body?.message || ''
-      let suggestion = 'Check the API documentation for valid parameter formats'
-
-      // Detect common property format mistakes and provide specific guidance
-      if (bodyMessage.includes('rich_text') || bodyMessage.includes('title')) {
-        suggestion =
-          'Property format error. For database page properties, use simple values: {"Name": "text", "Status": "value", "Tags": ["a","b"], "Count": 42, "Done": true, "Due": "2025-01-15"}. The server auto-converts to Notion format.'
-      } else if (bodyMessage.includes('property')) {
-        suggestion =
-          'Property name or type mismatch. Use databases(action="get") to check the schema, then match property names exactly (case-sensitive).'
-      }
-
-      return new NotionMCPError(
-        bodyMessage || 'Invalid request parameters',
-        'VALIDATION_ERROR',
-        suggestion,
-        sanitizeValidationBody(error.body)
-      )
-    }
-
-    case 'rate_limited':
-      return new NotionMCPError(
-        'Too many requests to Notion API',
-        'RATE_LIMITED',
-        'Wait a few seconds and try again. Consider batching operations.'
-      )
-
-    case 'conflict_error':
-      return new NotionMCPError(
-        'Conflict with existing data',
-        'CONFLICT',
-        'The resource may have been modified. Refresh and try again.'
-      )
-
-    case 'service_unavailable':
-      return new NotionMCPError(
-        'Notion API is temporarily unavailable',
-        'SERVICE_UNAVAILABLE',
-        'Wait a moment and try again. Check https://status.notion.so for updates.'
-      )
-
-    default:
-      return new NotionMCPError(message, code.toUpperCase(), 'Check the Notion API documentation for this error code')
-  }
+  // Chain of responsibility: Notion -> Network -> Generic
+  return mapNotionError(error) || mapNetworkError(error) || mapGenericError(error)
 }
 
 /**
@@ -200,6 +221,11 @@ export function findClosestMatch(input: string, validOptions: string[]): string 
   let bestMatch: string | null = null
   let bestScore = 0
 
+  // Pre-calculate input bigrams outside the loop to avoid redundant allocations
+  // Bolt optimization: moved from inside the validOptions loop
+  const inputBigrams = new Set<string>()
+  for (let i = 0; i < lower.length - 1; i++) inputBigrams.add(lower.slice(i, i + 2))
+
   for (const option of validOptions) {
     const optionLower = option.toLowerCase()
     // Check prefix match first
@@ -207,8 +233,6 @@ export function findClosestMatch(input: string, validOptions: string[]): string 
       return option
     }
     // Simple bigram similarity
-    const inputBigrams = new Set<string>()
-    for (let i = 0; i < lower.length - 1; i++) inputBigrams.add(lower.slice(i, i + 2))
     const optionBigrams = new Set<string>()
     for (let i = 0; i < optionLower.length - 1; i++) optionBigrams.add(optionLower.slice(i, i + 2))
 
@@ -232,8 +256,10 @@ export function findClosestMatch(input: string, validOptions: string[]): string 
 export function aiReadableMessage(error: NotionMCPError): string {
   let message = `Error: ${error.message}`
 
-  if (error.suggestion) {
-    message += `\n\nSuggestion: ${error.suggestion}`
+  // Use explicit suggestion if present, otherwise fallback to suggestFixes()
+  const suggestion = error.suggestion || suggestFixes(error).join('\n- ')
+  if (suggestion) {
+    message += `\n\nSuggestion: ${error.suggestion ? suggestion : `\n- ${suggestion}`}`
   }
 
   if (error.details) {
@@ -246,47 +272,52 @@ export function aiReadableMessage(error: NotionMCPError): string {
 /**
  * Suggest fixes based on error
  */
+// ⚡ Bolt: Cache suggestion arrays to avoid O(n) switch statements and
+// repeated array allocation/pushes on every error handled.
+const _ERROR_SUGGESTIONS_MAP: Record<string, string[]> = {
+  UNAUTHORIZED: [
+    'Check that NOTION_TOKEN is set in your environment',
+    'Verify token at https://www.notion.so/my-integrations',
+    'Create a new integration token if needed'
+  ],
+  RESTRICTED_RESOURCE: [
+    'Open the page/database in Notion',
+    'Click "..." menu → Add connections → Select your integration',
+    'Grant access to parent pages if needed'
+  ],
+  NOT_FOUND: [
+    'Verify the page/database ID is correct',
+    'Check that the resource was not deleted',
+    'Ensure you have access permissions'
+  ],
+  VALIDATION_ERROR: [
+    'Check parameter types and formats',
+    'Review required vs optional parameters',
+    'Verify property names match database schema'
+  ],
+  RATE_LIMITED: [
+    'Reduce request frequency',
+    'Implement exponential backoff retry logic',
+    'Batch multiple operations together'
+  ],
+  COMMENTS_LIST_UNAVAILABLE: [
+    'Use action="get" with a specific comment_id if known',
+    'Use action="create" to add a new comment (this endpoint is unaffected)',
+    'This is a known Notion API limitation with OAuth tokens as of 2025-09-03'
+  ]
+}
+
+const _DEFAULT_SUGGESTIONS = [
+  'Check Notion API status at https://status.notion.so',
+  'Review request parameters',
+  'Try again in a few moments'
+]
+
+/**
+ * Suggest fixes based on error
+ */
 export function suggestFixes(error: NotionMCPError): string[] {
-  const suggestions: string[] = []
-
-  switch (error.code) {
-    case 'UNAUTHORIZED':
-      suggestions.push('Check that NOTION_TOKEN is set in your environment')
-      suggestions.push('Verify token at https://www.notion.so/my-integrations')
-      suggestions.push('Create a new integration token if needed')
-      break
-
-    case 'RESTRICTED_RESOURCE':
-      suggestions.push('Open the page/database in Notion')
-      suggestions.push('Click "..." menu → Add connections → Select your integration')
-      suggestions.push('Grant access to parent pages if needed')
-      break
-
-    case 'NOT_FOUND':
-      suggestions.push('Verify the page/database ID is correct')
-      suggestions.push('Check that the resource was not deleted')
-      suggestions.push('Ensure you have access permissions')
-      break
-
-    case 'VALIDATION_ERROR':
-      suggestions.push('Check parameter types and formats')
-      suggestions.push('Review required vs optional parameters')
-      suggestions.push('Verify property names match database schema')
-      break
-
-    case 'RATE_LIMITED':
-      suggestions.push('Reduce request frequency')
-      suggestions.push('Implement exponential backoff retry logic')
-      suggestions.push('Batch multiple operations together')
-      break
-
-    default:
-      suggestions.push('Check Notion API status at https://status.notion.so')
-      suggestions.push('Review request parameters')
-      suggestions.push('Try again in a few moments')
-  }
-
-  return suggestions
+  return _ERROR_SUGGESTIONS_MAP[error.code] || _DEFAULT_SUGGESTIONS
 }
 
 /**

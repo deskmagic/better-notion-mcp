@@ -31,6 +31,81 @@ function isNotionIconShorthand(value: string): boolean {
   return NOTION_ICON_COLORS.has(color)
 }
 
+/** Format an HTTP/HTTPS URL as an external icon */
+function formatHttpIcon(value: string): { type: 'external'; external: { url: string } } | null {
+  if (!(value.startsWith('http://') || value.startsWith('https://'))) {
+    return null
+  }
+
+  if (!isSafeUrl(value)) {
+    throw new NotionMCPError(
+      `Unsafe icon URL: "${value}". Use http: or https: URLs only.`,
+      'VALIDATION_ERROR',
+      'Provide a valid http: or https: URL for the icon'
+    )
+  }
+  return { type: 'external', external: { url: value } }
+}
+
+/** Expand a Notion built-in icon shorthand (e.g. "document:gray") to native icon format */
+function formatShorthandIcon(value: string): { type: 'icon'; icon: { name: string; color: string } } | null {
+  if (!isNotionIconShorthand(value)) {
+    return null
+  }
+
+  const colonIdx = value.lastIndexOf(':')
+  const name = value.slice(0, colonIdx)
+  const color = value.slice(colonIdx + 1)
+  return { type: 'icon', icon: { name, color } }
+}
+
+/** Format a file_upload reference (e.g. "file_upload:<uuid>") */
+function formatFileUploadIcon(value: string): { type: 'file_upload'; file_upload: { id: string } } | null {
+  if (!value.startsWith('file_upload:')) {
+    return null
+  }
+
+  const id = value.slice('file_upload:'.length)
+  if (!id || !UUID_RE.test(id)) {
+    throw new NotionMCPError(
+      `Invalid file_upload icon: "${value}". Provide a valid UUID after "file_upload:".`,
+      'VALIDATION_ERROR',
+      'Format: file_upload:<uuid> (e.g., file_upload:a1b2c3d4-e5f6-7890-abcd-ef1234567890)'
+    )
+  }
+  return { type: 'file_upload', file_upload: { id } }
+}
+
+/** Format an upload-from-path marker (e.g. "upload:/abs/path/file.png") for deferred upload */
+function formatUploadPathIcon(value: string): { type: 'upload_pending'; path: string } | null {
+  if (!value.startsWith('upload:')) {
+    return null
+  }
+
+  const path = value.slice('upload:'.length)
+  if (!path?.startsWith('/')) {
+    throw new NotionMCPError(
+      `Invalid upload icon path: "${value}". Provide an absolute path after "upload:".`,
+      'VALIDATION_ERROR',
+      'Format: upload:/absolute/path/to/file.png'
+    )
+  }
+  return { type: 'upload_pending', path }
+}
+
+/** Format an emoji icon after validating against unsafe URL schemes */
+function formatEmojiIcon(value: string): { type: 'emoji'; emoji: string } {
+  // Reject dangerous URL schemes before falling through to emoji
+  if (!isSafeUrl(value)) {
+    throw new NotionMCPError(
+      `Unsafe icon value: "${value}". Use an emoji, a valid URL, or a built-in shorthand (name:color).`,
+      'VALIDATION_ERROR',
+      'Provide an emoji, an http/https URL, or a Notion icon shorthand like "document:gray"'
+    )
+  }
+  return { type: 'emoji', emoji: value }
+}
+
 /**
  * Format an icon value for the Notion API.
  * Accepts:
@@ -48,55 +123,14 @@ export function formatIcon(value: string): { type: string; [key: string]: any } 
       'Provide an emoji, an http/https URL, or a Notion icon shorthand like "document:gray"'
     )
   }
-  if (value.startsWith('http://') || value.startsWith('https://')) {
-    if (!isSafeUrl(value)) {
-      throw new NotionMCPError(
-        `Unsafe icon URL: "${value}". Use http: or https: URLs only.`,
-        'VALIDATION_ERROR',
-        'Provide a valid http: or https: URL for the icon'
-      )
-    }
-    return { type: 'external', external: { url: value } }
-  }
-  // file_upload:<uuid> reference
-  if (value.startsWith('file_upload:')) {
-    const id = value.slice('file_upload:'.length)
-    if (!id || !UUID_RE.test(id)) {
-      throw new NotionMCPError(
-        `Invalid file_upload icon: "${value}". Provide a valid UUID after "file_upload:".`,
-        'VALIDATION_ERROR',
-        'Format: file_upload:<uuid> (e.g., file_upload:a1b2c3d4-e5f6-7890-abcd-ef1234567890)'
-      )
-    }
-    return { type: 'file_upload', file_upload: { id } }
-  }
-  // upload:/path marker for deferred file upload
-  if (value.startsWith('upload:')) {
-    const path = value.slice('upload:'.length)
-    if (!path?.startsWith('/')) {
-      throw new NotionMCPError(
-        `Invalid upload icon path: "${value}". Provide an absolute path after "upload:".`,
-        'VALIDATION_ERROR',
-        'Format: upload:/absolute/path/to/file.png'
-      )
-    }
-    return { type: 'upload_pending', path }
-  }
-  if (isNotionIconShorthand(value)) {
-    const colonIdx = value.lastIndexOf(':')
-    const name = value.slice(0, colonIdx)
-    const color = value.slice(colonIdx + 1)
-    return { type: 'icon', icon: { name, color } }
-  }
-  // Reject dangerous URL schemes before falling through to emoji
-  if (!isSafeUrl(value)) {
-    throw new NotionMCPError(
-      `Unsafe icon value: "${value}". Use an emoji, a valid URL, or a built-in shorthand (name:color).`,
-      'VALIDATION_ERROR',
-      'Provide an emoji, an http/https URL, or a Notion icon shorthand like "document:gray"'
-    )
-  }
-  return { type: 'emoji', emoji: value }
+
+  return (
+    formatFileUploadIcon(value) ??
+    formatUploadPathIcon(value) ??
+    formatHttpIcon(value) ??
+    formatShorthandIcon(value) ??
+    formatEmojiIcon(value)
+  )
 }
 
 /**

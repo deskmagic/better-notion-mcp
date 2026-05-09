@@ -1,4 +1,6 @@
-import type { Client } from '@notionhq/client'
+import type { BlockObjectResponse, Client } from '@notionhq/client'
+
+type RecursiveBlock = BlockObjectResponse & { [key: string]: any }
 
 /**
  * Pagination Helper
@@ -66,46 +68,90 @@ const BLOCKS_NEEDING_CHILDREN = new Set([
 const MAX_DEPTH = 5
 
 /**
+ * Simple concurrency queue to manage parallel tasks with a limit.
+ * Supports fail-fast (stops starting new tasks if one fails).
+ */
+export class ConcurrencyQueue {
+  private activeCount = 0
+  private queue: (() => void)[] = []
+  private hasError = false
+
+  constructor(private readonly limit: number) {}
+
+  async run<T>(task: () => Promise<T>): Promise<T> {
+    if (this.hasError) {
+      throw new Error('Queue stopped due to previous error')
+    }
+
+    if (this.activeCount >= this.limit) {
+      await new Promise<void>((resolve) => this.queue.push(resolve))
+    }
+
+    if (this.hasError) {
+      throw new Error('Queue stopped due to previous error')
+    }
+
+    this.activeCount++
+    try {
+      return await task()
+    } catch (error) {
+      this.hasError = true
+      // Notify all waiting tasks to wake up and see the error
+      const waiters = this.queue
+      this.queue = []
+      for (const resolve of waiters) {
+        resolve()
+      }
+      throw error
+    } finally {
+      this.activeCount--
+      if (this.queue.length > 0 && !this.hasError) {
+        const next = this.queue.shift()
+        next?.()
+      }
+    }
+  }
+}
+
+/**
  * Recursively fetch children for blocks that need them (tables, toggles, columns, etc.)
  * Mutates blocks in-place by attaching children arrays.
  */
 export async function fetchChildrenRecursive(
-  blocks: any[],
-  fetchChildren: (blockId: string) => Promise<any[]>,
-  depth = 0
+  blocks: RecursiveBlock[],
+  fetchChildren: (blockId: string) => Promise<RecursiveBlock[]>,
+  depth = 0,
+  queue?: ConcurrencyQueue
 ): Promise<void> {
   if (depth >= MAX_DEPTH) return
 
-  const blocksNeedingChildren = blocks.filter((b) => b.has_children && BLOCKS_NEEDING_CHILDREN.has(b.type))
+  const fetchAndRecurse = async (block: RecursiveBlock) => {
+    const children = queue ? await queue.run(() => fetchChildren(block.id)) : await fetchChildren(block.id)
 
-  if (blocksNeedingChildren.length === 0) return
+    // Attach children to the correct property based on block type
+    if (block[block.type]) {
+      block[block.type].children = children
+    }
 
-  const recursivePromises: Promise<void>[] = []
+    // Recurse into children
+    await fetchChildrenRecursive(children, fetchChildren, depth + 1, queue)
+  }
 
-  // Fetch children in parallel (batch of 5 to respect rate limits)
-  for (let i = 0; i < blocksNeedingChildren.length; i += 5) {
-    const batch = blocksNeedingChildren.slice(i, i + 5)
-    const childrenResults = await Promise.all(batch.map((b) => fetchChildren(b.id)))
-    for (let j = 0; j < batch.length; j++) {
-      const block = batch[j]
-      const children = childrenResults[j]
-      // Attach children to the correct property based on block type
-      if (block[block.type]) {
-        block[block.type].children = children
-      }
-      // Recurse into children
-      recursivePromises.push(fetchChildrenRecursive(children, fetchChildren, depth + 1))
+  const promises: Promise<void>[] = []
+  for (let i = 0; i < blocks.length; i++) {
+    const block = blocks[i]
+    if (block.has_children && BLOCKS_NEEDING_CHILDREN.has(block.type)) {
+      promises.push(fetchAndRecurse(block))
     }
   }
 
-  // ⚡ Bolt: Parallelize recursive tree traversal by awaiting all children's
-  // recursion after processing all batches at the current depth, rather than
-  // sequentially waiting for each batch's deep traversal to finish.
-  await Promise.all(recursivePromises)
+  if (promises.length > 0) {
+    await Promise.all(promises)
+  }
 }
 
 /**
- * Process items in batches with concurrency limit using a rolling window
+ * Process items in batches with concurrency limit using ConcurrencyQueue
  */
 export async function processBatches<T, R>(
   items: T[],
@@ -113,39 +159,32 @@ export async function processBatches<T, R>(
   options: { batchSize?: number; concurrency?: number } = {}
 ): Promise<R[]> {
   const { batchSize = 10, concurrency = 3 } = options
-  const itemConcurrency = batchSize * concurrency
+  const totalConcurrency = batchSize * concurrency
 
-  const results: R[] = new Array(items.length)
-  let currentIndex = 0
-
-  let hasError = false
-
-  const worker = async () => {
-    while (currentIndex < items.length && !hasError) {
-      const index = currentIndex++
-      try {
-        results[index] = await processFn(items[index])
-      } catch (error) {
-        hasError = true
-        throw error
-      }
-    }
+  const queue = new ConcurrencyQueue(totalConcurrency)
+  const promises = new Array(items.length)
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i]
+    promises[i] = queue.run(() => processFn(item))
   }
-
-  const workers = Array.from({ length: Math.min(itemConcurrency, items.length) }, () => worker())
-
-  await Promise.all(workers)
-
-  return results
+  return Promise.all(promises)
 }
 
 /**
  * Recursively fetch and populate children for blocks using auto-pagination
  */
-export async function populateDeepChildren(notion: Client, blocks: any[]): Promise<void> {
-  await fetchChildrenRecursive(blocks, async (blockId) => {
-    return autoPaginate((cursor) =>
-      notion.blocks.children.list({ block_id: blockId, start_cursor: cursor, page_size: 100 })
-    ) as any
-  })
+export async function populateDeepChildren(notion: Client, blocks: RecursiveBlock[]): Promise<void> {
+  // Use a shared queue to cap total concurrent Notion API calls at 5 across the whole tree
+  const queue = new ConcurrencyQueue(5)
+
+  await fetchChildrenRecursive(
+    blocks,
+    async (blockId) => {
+      return autoPaginate((cursor) =>
+        notion.blocks.children.list({ block_id: blockId, start_cursor: cursor, page_size: 100 })
+      ) as Promise<RecursiveBlock[]>
+    },
+    0,
+    queue
+  )
 }
