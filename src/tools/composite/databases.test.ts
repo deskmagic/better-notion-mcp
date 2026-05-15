@@ -990,9 +990,7 @@ describe('databases', () => {
       })
 
       expect(mockNotion.dataSources.listTemplates).toHaveBeenCalledTimes(1)
-      expect(mockNotion.dataSources.listTemplates).toHaveBeenCalledWith(
-        expect.objectContaining({ page_size: 1 })
-      )
+      expect(mockNotion.dataSources.listTemplates).toHaveBeenCalledWith(expect.objectContaining({ page_size: 1 }))
     })
 
     it('should push limit=50 down to page_size=50 in a single call', async () => {
@@ -1010,9 +1008,7 @@ describe('databases', () => {
       })) as ListDataSourceTemplatesResponse
 
       expect(mockNotion.dataSources.listTemplates).toHaveBeenCalledTimes(1)
-      expect(mockNotion.dataSources.listTemplates).toHaveBeenCalledWith(
-        expect.objectContaining({ page_size: 50 })
-      )
+      expect(mockNotion.dataSources.listTemplates).toHaveBeenCalledWith(expect.objectContaining({ page_size: 50 }))
       expect(result.total).toBe(50)
     })
 
@@ -1068,9 +1064,7 @@ describe('databases', () => {
 
       await databases(notion, { action: 'list_templates', database_id: 'db-1' })
 
-      expect(mockNotion.dataSources.listTemplates).toHaveBeenCalledWith(
-        expect.objectContaining({ page_size: 100 })
-      )
+      expect(mockNotion.dataSources.listTemplates).toHaveBeenCalledWith(expect.objectContaining({ page_size: 100 }))
     })
   })
 
