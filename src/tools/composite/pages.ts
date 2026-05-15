@@ -3,7 +3,7 @@
  * All page operations in one unified interface
  */
 
-import type { Client } from '@notionhq/client'
+import type { Client, PageObjectResponse } from '@notionhq/client'
 import { formatCover } from '../helpers/covers.js'
 import { NotionMCPError, withErrorHandling } from '../helpers/errors.js'
 import { formatIcon, resolveIcon } from '../helpers/icons.js'
@@ -235,7 +235,7 @@ async function createPage(notion: Client, input: PagesInput): Promise<CreatePage
   const normalizedId = input.parent_id.replace(/-/g, '')
 
   // Auto-detect parent type
-  let parent: any
+  let parent: Record<string, any>
   if (input.properties && Object.keys(input.properties).length > 0) {
     parent = { type: 'database_id', database_id: normalizedId }
   } else {
@@ -243,7 +243,7 @@ async function createPage(notion: Client, input: PagesInput): Promise<CreatePage
   }
 
   // Prepare properties
-  let properties: any = {}
+  let properties: Record<string, any> = {}
   if (parent.database_id) {
     properties = convertToNotionProperties(input.properties || {})
     if (!properties.title && !properties.Name && !properties.Title) {
@@ -253,7 +253,7 @@ async function createPage(notion: Client, input: PagesInput): Promise<CreatePage
     properties = { title: { title: [RichText.text(input.title)] } }
   }
 
-  const pageData: any = { parent, properties }
+  const pageData: Record<string, any> = { parent, properties }
   if (input.icon_file) {
     pageData.icon = await uploadIconFile(notion, input.icon_file)
   } else if (input.icon) {
@@ -261,7 +261,7 @@ async function createPage(notion: Client, input: PagesInput): Promise<CreatePage
   }
   if (input.cover) pageData.cover = formatCover(input.cover)
 
-  const page = await notion.pages.create(pageData)
+  const page = (await notion.pages.create(pageData)) as PageObjectResponse
 
   // Add content if provided
   if (input.content) {
@@ -277,7 +277,7 @@ async function createPage(notion: Client, input: PagesInput): Promise<CreatePage
   return {
     action: 'create',
     page_id: page.id,
-    url: (page as any).url,
+    url: page.url,
     created: true
   }
 }
@@ -291,7 +291,7 @@ async function getPage(notion: Client, input: PagesInput): Promise<GetPageResult
     throw new NotionMCPError('page_id is required for get action', 'VALIDATION_ERROR', 'Provide page_id')
   }
 
-  const page: any = await notion.pages.retrieve({ page_id: input.page_id })
+  const page = (await notion.pages.retrieve({ page_id: input.page_id })) as PageObjectResponse
 
   // Get all blocks with auto-pagination
   const blocks = await autoPaginate((cursor) =>
@@ -446,7 +446,7 @@ async function updatePage(notion: Client, input: PagesInput): Promise<UpdatePage
     throw new NotionMCPError('page_id is required for update action', 'VALIDATION_ERROR', 'Provide page_id')
   }
 
-  const updates: any = {}
+  const updates: Record<string, any> = {}
 
   // Update metadata
   if (input.icon_file) {

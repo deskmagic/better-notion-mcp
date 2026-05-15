@@ -2,7 +2,7 @@
 
 mcp-name: io.github.n24q02m/better-notion-mcp
 
-**Markdown-first Notion API server for AI agents -- 9 composite tools replacing 28+ endpoint calls**
+**Markdown-first Notion API server for AI agents -- 10 composite tools replacing 28+ endpoint calls**
 
 <!-- Badge Row 1: Status -->
 [![CI](https://github.com/n24q02m/better-notion-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/n24q02m/better-notion-mcp/actions/workflows/ci.yml)
@@ -18,6 +18,44 @@ mcp-name: io.github.n24q02m/better-notion-mcp
 [![semantic-release](https://img.shields.io/badge/semantic--release-e10079?logo=semantic-release&logoColor=white)](https://github.com/python-semantic-release/python-semantic-release)
 [![Renovate](https://img.shields.io/badge/renovate-enabled-1A1F6C?logo=renovatebot&logoColor=white)](https://developer.mend.io/)
 
+<!-- BEGIN: AUTO-GENERATED-CROSS-PROMO -->
+<details>
+  <summary><strong>Sister projects from n24q02m</strong> (click to expand)</summary>
+
+| Project | Tagline | Tag |
+|---|---|---|
+| [better-code-review-graph](https://github.com/n24q02m/better-code-review-graph) | Knowledge graph for token-efficient code reviews -- fixed search, configurabl... | MCP |
+| [better-email-mcp](https://github.com/n24q02m/better-email-mcp) | IMAP/SMTP email server for AI agents -- 6 composite tools with multi-account ... | MCP |
+| [better-godot-mcp](https://github.com/n24q02m/better-godot-mcp) | Composite MCP server for Godot Engine -- 17 mega-tools for AI-assisted game d... | MCP |
+| [better-notion-mcp](https://github.com/n24q02m/better-notion-mcp) | Markdown-first Notion API server for AI agents -- 10 composite tools replacin... | MCP |
+| [better-telegram-mcp](https://github.com/n24q02m/better-telegram-mcp) | MCP server for Telegram with dual-mode support: Bot API (httpx) for quick bot... | MCP |
+| [claude-plugins](https://github.com/n24q02m/claude-plugins) | Full documentation: mcp.n24q02m.com — unified docs for all 8 servers + the mc... | Marketplace |
+| [imagine-mcp](https://github.com/n24q02m/imagine-mcp) | Production-grade MCP server for image and video understanding + generation ac... | MCP |
+| [jules-task-archiver](https://github.com/n24q02m/jules-task-archiver) | Chrome Extension for bulk operations on Jules tasks via batchexecute API -- a... | Tooling |
+| [mcp-core](https://github.com/n24q02m/mcp-core) | Unified MCP Streamable HTTP 2025-11-25 transport, OAuth 2.1 Authorization Ser... | MCP |
+| [mnemo-mcp](https://github.com/n24q02m/mnemo-mcp) | Persistent AI memory with hybrid search and embedded sync. Open, free, unlimi... | MCP |
+| [qwen3-embed](https://github.com/n24q02m/qwen3-embed) | Lightweight Qwen3 text embedding and reranking via ONNX Runtime and GGUF | Library |
+| [skret](https://github.com/n24q02m/skret) | Secrets without the server. | CLI |
+| [web-core](https://github.com/n24q02m/web-core) | Shared web infrastructure package for search, scraping, HTTP security, and st... | Library |
+| [wet-mcp](https://github.com/n24q02m/wet-mcp) | Open-source MCP Server for web search, content extraction, library docs & mul... | MCP |
+
+</details>
+<!-- END: AUTO-GENERATED-CROSS-PROMO -->
+
+## Table of contents
+
+- [Features](#features)
+- [Status](#status)
+- [Documentation](#documentation)
+- [Tools](#tools)
+- [Configuration](#configuration)
+- [Security](#security)
+- [Build from Source](#build-from-source)
+- [Trust Model](#trust-model)
+- [License](#license)
+
+
+
 <a href="https://glama.ai/mcp/servers/n24q02m/better-notion-mcp">
   <img width="380" height="200" src="https://glama.ai/mcp/servers/n24q02m/better-notion-mcp/badge" alt="Better Notion MCP server" />
 </a>
@@ -25,100 +63,42 @@ mcp-name: io.github.n24q02m/better-notion-mcp
 ## Features
 
 - **Markdown in, Markdown out** -- human-readable content instead of raw JSON blocks
-- **9 composite tools** with 39 actions -- one call instead of chaining 2+ atomic endpoints
+- **10 composite tools** with 44 actions -- one call instead of chaining 2+ atomic endpoints
 - **Auto-pagination and bulk operations** -- no manual cursor handling or looping
 - **Tiered token optimization** -- ~77% reduction via compressed descriptions + on-demand `help` tool
 - **Dual transport** -- local stdio (token) or remote HTTP (OAuth 2.1, no token needed)
 
-## Quick Start
+## Status
 
-### Claude Code Plugin (Recommended)
+> **2026-05-02 -- Architecture stabilization update**
+>
+> Past months saw significant churn around credential handling and the daemon-bridge auto-spawn pattern. This caused multi-process races, browser tab spam, and inconsistent setup UX across plugins. **As of v<auto>, the architecture is stable**: 2 clean modes (stdio + HTTP), no daemon-bridge layer, no auto-spawn from stdio.
+>
+> Apologies for the instability period. If you encountered issues with prior versions, please update to v<auto>+ and follow the current `docs/setup-manual.md` -- most prior workarounds are no longer needed.
+>
+> **Related plugins from the same author**:
+> - [wet-mcp](https://github.com/n24q02m/wet-mcp) -- Web search + content extraction
+> - [mnemo-mcp](https://github.com/n24q02m/mnemo-mcp) -- Persistent AI memory
+> - [imagine-mcp](https://github.com/n24q02m/imagine-mcp) -- Image/video understanding + generation
+> - [better-email-mcp](https://github.com/n24q02m/better-email-mcp) -- Email management
+> - [better-telegram-mcp](https://github.com/n24q02m/better-telegram-mcp) -- Telegram
+> - [better-godot-mcp](https://github.com/n24q02m/better-godot-mcp) -- Godot Engine
+> - [better-code-review-graph](https://github.com/n24q02m/better-code-review-graph) -- Code review knowledge graph
+>
+> All plugins share the same architecture -- install once, learn pattern transfers.
 
-Via marketplace (includes skills: /organize-database, /bulk-update):
+## Documentation
 
-```bash
-/plugin marketplace add n24q02m/claude-plugins
-/plugin install better-notion-mcp@n24q02m-plugins
-```
+Full docs at **[mcp.n24q02m.com/servers/better-notion-mcp/](https://mcp.n24q02m.com/servers/better-notion-mcp/)**:
 
+- [Setup](https://mcp.n24q02m.com/servers/better-notion-mcp/setup/) -- install methods for Claude Code, Codex, Gemini CLI, Cursor, Windsurf, mcp.json
+- [Modes overview](https://mcp.n24q02m.com/get-started/modes-overview/) -- stdio / local-relay / remote-relay / remote-oauth
+- [Multi-user setup](https://mcp.n24q02m.com/get-started/multi-user/) -- per-JWT-sub credential model
 
+**Install with AI agent** -- paste this to your AI coding agent:
 
-Plugin uses remote OAuth — no `NOTION_TOKEN` needed. Browser opens for Notion authorization on first use.
-
-### Gemini CLI Extension
-
-```bash
-gemini extensions install https://github.com/n24q02m/better-notion-mcp
-```
-
-### Codex CLI
-
-Add to `~/.codex/config.toml`:
-
-```toml
-[mcp_servers.better-notion-mcp]
-command = "npx"
-args = ["-y", "@n24q02m/better-notion-mcp"]
-```
-
-### MCP Server
-
-#### Option 1: Remote (OAuth) -- No token needed
-
-Connect directly via URL with OAuth authentication. Your MCP client handles the OAuth flow automatically.
-
-```jsonc
-{
-  "mcpServers": {
-    "better-notion": {
-      "type": "http",
-      "url": "https://better-notion-mcp.n24q02m.com/mcp"
-    }
-  }
-}
-```
-
-#### Option 2: npx
-
-Get your token: <https://www.notion.so/my-integrations> -> Create integration -> Copy token -> Share pages
-
-Set `NOTION_TOKEN` in `~/.claude/settings.local.json` or your shell profile:
-
-```bash
-export NOTION_TOKEN="ntn_..."
-```
-
-Then add to your MCP client config:
-
-```jsonc
-{
-  "mcpServers": {
-    "better-notion": {
-      "command": "npx",
-      "args": ["-y", "@n24q02m/better-notion-mcp@latest"]
-    }
-  }
-}
-```
-
-Other runners: `bun x`, `pnpm dlx`, `yarn dlx` also work.
-
-#### Option 3: Docker
-
-```jsonc
-{
-  "mcpServers": {
-    "better-notion": {
-      "command": "docker",
-      "args": [
-        "run", "-i", "--rm",
-        "-e", "NOTION_TOKEN",
-        "n24q02m/better-notion-mcp:latest"
-      ]
-    }
-  }
-}
-```
+> Install MCP server `better-notion-mcp` following the steps at
+> https://raw.githubusercontent.com/n24q02m/claude-plugins/main/plugins/better-notion-mcp/setup-with-agent.md
 
 ## Tools
 
@@ -132,6 +112,7 @@ Other runners: `bun x`, `pnpm dlx`, `yarn dlx` also work.
 | `comments` | `list`, `get`, `create` | Page and block comments |
 | `content_convert` | `markdown-to-blocks`, `blocks-to-markdown` | Convert between Markdown and Notion blocks |
 | `file_uploads` | `create`, `send`, `complete`, `retrieve`, `list` | Upload files to Notion |
+| `setup` | `status`, `start`, `reset`, `complete` | Credential setup via browser relay, status check, reset, re-resolve |
 | `help` | - | Get full documentation for any tool |
 
 ### MCP Resources
@@ -146,19 +127,6 @@ Other runners: `bun x`, `pnpm dlx`, `yarn dlx` also work.
 | `notion://docs/comments` | Comment operations reference |
 | `notion://docs/content_convert` | Content conversion reference |
 | `notion://docs/file_uploads` | File upload reference |
-
-## Zero-Config Setup
-
-No environment variables needed. On first start, the server opens a setup page in your browser:
-
-1. Start the server (via plugin, `npx`, or Docker)
-2. A setup URL appears -- open it in any browser
-3. Fill in your credentials on the guided form
-4. Credentials are encrypted and stored locally
-
-Your credentials never leave your machine. The relay server only sees encrypted data.
-
-For CI/automation, you can still use environment variables (see below).
 
 ## Configuration
 
@@ -206,6 +174,16 @@ cd better-notion-mcp
 bun install
 bun run dev
 ```
+
+## Trust Model
+
+This plugin implements **TC-NearZK** (in-memory, ephemeral). See [mcp-core/docs/TRUST-MODEL.md](https://github.com/n24q02m/mcp-core/blob/main/docs/TRUST-MODEL.md) for full classification.
+
+| Mode | Storage | Encryption | Who can read your data? |
+|---|---|---|---|
+| HTTP n24q02m-hosted (default) | In-memory `Map<sub, OAuthToken>` | In-process only | Server process (cleared on restart) |
+| HTTP self-host | Same as hosted | Same | Only you (admin = user) |
+| stdio proxy | `~/.better-notion-mcp/config.json` | AES-GCM, machine-bound key | Only your OS user (file perm 0600) |
 
 ## License
 

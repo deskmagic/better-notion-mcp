@@ -14,10 +14,9 @@
     "copilot",
     "antigravity",
     "codex",
-    "opencode",
-    "gemini-cli"
+    "opencode"
   ],
-  "version": "2.23.0-beta.1",
+  "version": "2.33.0",
   "license": "MIT",
   "type": "module",
   "packageManager": "bun@1.2.21",
@@ -49,7 +48,7 @@
     "better-notion-mcp": "bin/cli.mjs"
   },
   "engines": {
-    "node": ">=24.14.1"
+    "node": ">=24.15.0"
   },
   "files": [
     "build/",
@@ -59,21 +58,21 @@
   ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "@n24q02m/mcp-relay-core": "^1.2.0",
-    "@notionhq/client": "^5.16.0",
-    "express": "^5.2.1",
-    "express-rate-limit": "^8.3.2",
-    "zod": "^4.3.6"
+    "@n24q02m/mcp-core": "1.14.0",
+    "@notionhq/client": "^5.20.0",
+    "zod": "^4.4.3"
   },
+  "trustedDependencies": [
+    "esbuild"
+  ],
   "devDependencies": {
-    "@biomejs/biome": "^2.4.10",
-    "@types/express": "^5.0.6",
-    "@types/node": "^24.12.0",
-    "@vitest/coverage-v8": "^4.1.2",
+    "@biomejs/biome": "^2.4.14",
+    "@types/node": "^24.12.3",
+    "@vitest/coverage-v8": "^4.1.5",
     "esbuild": "^0.28.0",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
-    "vitest": "^4.1.2"
+    "vitest": "^4.1.5"
   },
   "description": "Better MCP server for Notion API with composite tools optimized for AI agents",
   "main": "build/src/init-server.js",

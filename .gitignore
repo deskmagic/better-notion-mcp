@@ -21,3 +21,15 @@ JULES.md
 
 # Code review knowledge graph
 .code-review-graph/
+
+# Generated files
+*_e2e_result.json
+docs/superpowers/
+
+# AI Assistant / Rules
+.jules/
+.jules
+.superpower/
+superpower/
+superpowers/
+docs/superpowers/
