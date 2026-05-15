@@ -974,6 +974,104 @@ describe('databases', () => {
     it('should throw when database_id is missing', async () => {
       await expect(databases(notion, { action: 'list_templates' })).rejects.toThrow('database_id required')
     })
+
+    it('should push limit=1 down to page_size=1 and call listTemplates only once', async () => {
+      mockNotion.databases.retrieve.mockResolvedValueOnce(makeDbRetrieveResponse())
+      mockNotion.dataSources.listTemplates.mockResolvedValueOnce({
+        templates: [{ id: 'tmpl-1', properties: {} }],
+        next_cursor: 'cursor-next',
+        has_more: true
+      })
+
+      await databases(notion, {
+        action: 'list_templates',
+        database_id: 'db-1',
+        limit: 1
+      })
+
+      expect(mockNotion.dataSources.listTemplates).toHaveBeenCalledTimes(1)
+      expect(mockNotion.dataSources.listTemplates).toHaveBeenCalledWith(
+        expect.objectContaining({ page_size: 1 })
+      )
+    })
+
+    it('should push limit=50 down to page_size=50 in a single call', async () => {
+      mockNotion.databases.retrieve.mockResolvedValueOnce(makeDbRetrieveResponse())
+      mockNotion.dataSources.listTemplates.mockResolvedValueOnce({
+        templates: Array.from({ length: 50 }, (_, i) => ({ id: `tmpl-${i}`, properties: {} })),
+        next_cursor: 'cursor-next',
+        has_more: true
+      })
+
+      const result = (await databases(notion, {
+        action: 'list_templates',
+        database_id: 'db-1',
+        limit: 50
+      })) as ListDataSourceTemplatesResponse
+
+      expect(mockNotion.dataSources.listTemplates).toHaveBeenCalledTimes(1)
+      expect(mockNotion.dataSources.listTemplates).toHaveBeenCalledWith(
+        expect.objectContaining({ page_size: 50 })
+      )
+      expect(result.total).toBe(50)
+    })
+
+    it('should clamp page_size to 100 when limit=250 and make at most 3 calls', async () => {
+      mockNotion.databases.retrieve.mockResolvedValueOnce(makeDbRetrieveResponse())
+      mockNotion.dataSources.listTemplates
+        .mockResolvedValueOnce({
+          templates: Array.from({ length: 100 }, (_, i) => ({ id: `tmpl-${i}`, properties: {} })),
+          next_cursor: 'c1',
+          has_more: true
+        })
+        .mockResolvedValueOnce({
+          templates: Array.from({ length: 100 }, (_, i) => ({ id: `tmpl-${100 + i}`, properties: {} })),
+          next_cursor: 'c2',
+          has_more: true
+        })
+        .mockResolvedValueOnce({
+          templates: Array.from({ length: 100 }, (_, i) => ({ id: `tmpl-${200 + i}`, properties: {} })),
+          next_cursor: 'c3',
+          has_more: true
+        })
+
+      const result = (await databases(notion, {
+        action: 'list_templates',
+        database_id: 'db-1',
+        limit: 250
+      })) as ListDataSourceTemplatesResponse
+
+      expect(mockNotion.dataSources.listTemplates).toHaveBeenCalledTimes(3)
+      // page_size on each page clamps to min(100, remaining budget).
+      expect(mockNotion.dataSources.listTemplates).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ page_size: 100 })
+      )
+      expect(mockNotion.dataSources.listTemplates).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ page_size: 100 })
+      )
+      expect(mockNotion.dataSources.listTemplates).toHaveBeenNthCalledWith(
+        3,
+        expect.objectContaining({ page_size: 50 })
+      )
+      expect(result.total).toBe(250)
+    })
+
+    it('should keep page_size=100 when limit is unset (unchanged behavior)', async () => {
+      mockNotion.databases.retrieve.mockResolvedValueOnce(makeDbRetrieveResponse())
+      mockNotion.dataSources.listTemplates.mockResolvedValueOnce({
+        templates: [],
+        next_cursor: null,
+        has_more: false
+      })
+
+      await databases(notion, { action: 'list_templates', database_id: 'db-1' })
+
+      expect(mockNotion.dataSources.listTemplates).toHaveBeenCalledWith(
+        expect.objectContaining({ page_size: 100 })
+      )
+    })
   })
 
   describe('ID resolution', () => {
