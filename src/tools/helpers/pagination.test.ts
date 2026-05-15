@@ -172,7 +172,7 @@ describe('autoPaginate', () => {
       expect(results).toEqual([1, 2, 3])
     })
 
-    it('should pass pageSize=100 on subsequent pages when maxItems exceeds 100', async () => {
+    it('should clamp pageSize to remaining budget on subsequent pages when maxItems exceeds 100', async () => {
       const fetchFn = vi
         .fn()
         .mockResolvedValueOnce({
@@ -193,10 +193,11 @@ describe('autoPaginate', () => {
 
       const results = await autoPaginate(fetchFn, { maxItems: 250 })
 
+      // Three pages requested; pageSize on each clamps to min(100, remaining budget).
       expect(fetchFn).toHaveBeenCalledTimes(3)
-      expect(fetchFn).toHaveBeenNthCalledWith(1, undefined, 100)
-      expect(fetchFn).toHaveBeenNthCalledWith(2, 'cursor-1', 100)
-      expect(fetchFn).toHaveBeenNthCalledWith(3, 'cursor-2', 100)
+      expect(fetchFn).toHaveBeenNthCalledWith(1, undefined, 100) // budget: 250 → 100
+      expect(fetchFn).toHaveBeenNthCalledWith(2, 'cursor-1', 100) // budget: 150 → 100
+      expect(fetchFn).toHaveBeenNthCalledWith(3, 'cursor-2', 50) // budget: 50 → 50
       expect(results).toHaveLength(250)
     })
   })

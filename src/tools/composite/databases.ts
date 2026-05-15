@@ -464,22 +464,24 @@ async function queryDatabase(notion: Client, input: DatabasesInput): Promise<Que
   if (filter) queryParams.filter = filter
   if (input.sorts) queryParams.sorts = input.sorts
 
-  // Fetch with pagination
-  const allResults = await autoPaginate(async (cursor) => {
-    const response: any = await (notion as any).dataSources.query({
-      ...queryParams,
-      start_cursor: cursor,
-      page_size: 100
-    })
-    return {
-      results: response.results,
-      next_cursor: response.next_cursor,
-      has_more: response.has_more
-    }
-  })
-
-  // Limit results if specified
-  const results = input.limit ? allResults.slice(0, input.limit) : allResults
+  // Fetch with pagination. Push the caller-supplied limit down into page_size
+  // so a "limit: 1" call doesn't enumerate the entire data source.
+  const maxItems = input.limit && input.limit > 0 ? input.limit : undefined
+  const results = await autoPaginate(
+    async (cursor, pageSize) => {
+      const response: any = await (notion as any).dataSources.query({
+        ...queryParams,
+        start_cursor: cursor,
+        page_size: pageSize
+      })
+      return {
+        results: response.results,
+        next_cursor: response.next_cursor,
+        has_more: response.has_more
+      }
+    },
+    { maxItems }
+  )
 
   // Format results
   const formattedResults = formatDatabaseResults(results)

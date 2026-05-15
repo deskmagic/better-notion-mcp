@@ -399,9 +399,10 @@ describe('databases', () => {
       })) as QueryDatabaseResponse
 
       expect(mockNotion.dataSources.query).toHaveBeenCalledTimes(3)
+      // page_size on each page clamps to min(100, remaining budget).
       expect(mockNotion.dataSources.query).toHaveBeenNthCalledWith(1, expect.objectContaining({ page_size: 100 }))
       expect(mockNotion.dataSources.query).toHaveBeenNthCalledWith(2, expect.objectContaining({ page_size: 100 }))
-      expect(mockNotion.dataSources.query).toHaveBeenNthCalledWith(3, expect.objectContaining({ page_size: 100 }))
+      expect(mockNotion.dataSources.query).toHaveBeenNthCalledWith(3, expect.objectContaining({ page_size: 50 }))
       expect(result.total).toBe(250)
     })
 

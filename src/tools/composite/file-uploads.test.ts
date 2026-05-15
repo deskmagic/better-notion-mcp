@@ -380,9 +380,10 @@ describe('fileUploads', () => {
       const result = await fileUploads(mockNotion as any, { action: 'list', limit: 250 })
 
       expect(mockNotion.fileUploads.list).toHaveBeenCalledTimes(3)
+      // page_size on each page clamps to min(100, remaining budget).
       expect(mockNotion.fileUploads.list).toHaveBeenNthCalledWith(1, expect.objectContaining({ page_size: 100 }))
       expect(mockNotion.fileUploads.list).toHaveBeenNthCalledWith(2, expect.objectContaining({ page_size: 100 }))
-      expect(mockNotion.fileUploads.list).toHaveBeenNthCalledWith(3, expect.objectContaining({ page_size: 100 }))
+      expect(mockNotion.fileUploads.list).toHaveBeenNthCalledWith(3, expect.objectContaining({ page_size: 50 }))
       expect(result.total).toBe(250)
     })
 

@@ -19,7 +19,11 @@ export interface PaginatedResponse<T> {
 export interface PaginationOptions {
   maxPages?: number // Max pages to fetch (0 = unlimited, capped by MAX_PAGES_SAFETY)
   pageSize?: number // Items per page (default: 100)
+  maxItems?: number // Stop once this many items are collected; also clamps first page_size
 }
+
+/** Notion API maximum page_size across paginated endpoints */
+const NOTION_MAX_PAGE_SIZE = 100
 
 /**
  * Fetch all pages automatically
@@ -28,14 +32,18 @@ export async function autoPaginate<T>(
   fetchFn: (cursor?: string, pageSize?: number) => Promise<PaginatedResponse<T>>,
   options: PaginationOptions = {}
 ): Promise<T[]> {
-  const { maxPages = 0, pageSize = 100 } = options
+  const { maxPages = 0, pageSize = NOTION_MAX_PAGE_SIZE, maxItems } = options
   const effectiveMax = maxPages > 0 ? Math.min(maxPages, MAX_PAGES_SAFETY) : MAX_PAGES_SAFETY
+  const hasItemCap = typeof maxItems === 'number' && maxItems > 0
   const allResults: T[] = []
   let cursor: string | null = null
   let pageCount = 0
 
   do {
-    const response = await fetchFn(cursor || undefined, pageSize)
+    // Clamp the requested page_size to the remaining item budget so a caller
+    // asking for limit:1 doesn't pay for a full 100-item page.
+    const requestedPageSize = hasItemCap ? Math.min(pageSize, Math.max(1, maxItems - allResults.length)) : pageSize
+    const response = await fetchFn(cursor || undefined, requestedPageSize)
     allResults.push(...response.results)
     cursor = response.next_cursor
     pageCount++
@@ -44,7 +52,17 @@ export async function autoPaginate<T>(
     if (pageCount >= effectiveMax) {
       break
     }
+
+    // Stop as soon as the item budget is met, regardless of has_more.
+    if (hasItemCap && allResults.length >= maxItems) {
+      break
+    }
   } while (cursor !== null)
+
+  // Defensive truncation: the last page may have overshot the budget.
+  if (hasItemCap && allResults.length > maxItems) {
+    return allResults.slice(0, maxItems)
+  }
 
   return allResults
 }

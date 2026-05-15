@@ -281,9 +281,10 @@ describe('workspace', () => {
       })) as Extract<WorkspaceResult, { action: 'search' }>
 
       expect(mockNotion.search).toHaveBeenCalledTimes(3)
+      // page_size on each page clamps to min(100, remaining budget).
       expect(mockNotion.search).toHaveBeenNthCalledWith(1, expect.objectContaining({ page_size: 100 }))
       expect(mockNotion.search).toHaveBeenNthCalledWith(2, expect.objectContaining({ page_size: 100 }))
-      expect(mockNotion.search).toHaveBeenNthCalledWith(3, expect.objectContaining({ page_size: 100 }))
+      expect(mockNotion.search).toHaveBeenNthCalledWith(3, expect.objectContaining({ page_size: 50 }))
       expect(result.total).toBe(250)
     })
 
