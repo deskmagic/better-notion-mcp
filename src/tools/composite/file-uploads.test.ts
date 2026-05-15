@@ -305,6 +305,98 @@ describe('fileUploads', () => {
       expect(result.file_uploads[0].file_upload_id).toBe('f1')
       expect(result.file_uploads[1].file_upload_id).toBe('f2')
     })
+
+    it('should push limit=1 down to page_size=1 and call list only once', async () => {
+      mockNotion.fileUploads.list.mockResolvedValue({
+        results: [
+          { id: 'f1', filename: 'a.png', content_type: 'image/png', status: 'uploaded', created_time: '2025-01-01' }
+        ],
+        next_cursor: 'cursor-next',
+        has_more: true
+      })
+
+      await fileUploads(mockNotion as any, { action: 'list', limit: 1 })
+
+      expect(mockNotion.fileUploads.list).toHaveBeenCalledTimes(1)
+      expect(mockNotion.fileUploads.list).toHaveBeenCalledWith(expect.objectContaining({ page_size: 1 }))
+    })
+
+    it('should push limit=50 down to page_size=50 in a single call', async () => {
+      mockNotion.fileUploads.list.mockResolvedValue({
+        results: Array.from({ length: 50 }, (_, i) => ({
+          id: `f${i}`,
+          filename: `f${i}.png`,
+          content_type: 'image/png',
+          status: 'uploaded',
+          created_time: '2025-01-01'
+        })),
+        next_cursor: 'cursor-next',
+        has_more: true
+      })
+
+      const result = await fileUploads(mockNotion as any, { action: 'list', limit: 50 })
+
+      expect(mockNotion.fileUploads.list).toHaveBeenCalledTimes(1)
+      expect(mockNotion.fileUploads.list).toHaveBeenCalledWith(expect.objectContaining({ page_size: 50 }))
+      expect(result.total).toBe(50)
+    })
+
+    it('should clamp page_size to 100 when limit=250 and make at most 3 calls', async () => {
+      mockNotion.fileUploads.list
+        .mockResolvedValueOnce({
+          results: Array.from({ length: 100 }, (_, i) => ({
+            id: `f${i}`,
+            filename: `f${i}.png`,
+            content_type: 'image/png',
+            status: 'uploaded',
+            created_time: '2025-01-01'
+          })),
+          next_cursor: 'c1',
+          has_more: true
+        })
+        .mockResolvedValueOnce({
+          results: Array.from({ length: 100 }, (_, i) => ({
+            id: `f${100 + i}`,
+            filename: `f${100 + i}.png`,
+            content_type: 'image/png',
+            status: 'uploaded',
+            created_time: '2025-01-01'
+          })),
+          next_cursor: 'c2',
+          has_more: true
+        })
+        .mockResolvedValueOnce({
+          results: Array.from({ length: 100 }, (_, i) => ({
+            id: `f${200 + i}`,
+            filename: `f${200 + i}.png`,
+            content_type: 'image/png',
+            status: 'uploaded',
+            created_time: '2025-01-01'
+          })),
+          next_cursor: 'c3',
+          has_more: true
+        })
+
+      const result = await fileUploads(mockNotion as any, { action: 'list', limit: 250 })
+
+      expect(mockNotion.fileUploads.list).toHaveBeenCalledTimes(3)
+      expect(mockNotion.fileUploads.list).toHaveBeenNthCalledWith(1, expect.objectContaining({ page_size: 100 }))
+      expect(mockNotion.fileUploads.list).toHaveBeenNthCalledWith(2, expect.objectContaining({ page_size: 100 }))
+      expect(mockNotion.fileUploads.list).toHaveBeenNthCalledWith(3, expect.objectContaining({ page_size: 100 }))
+      expect(result.total).toBe(250)
+    })
+
+    it('should keep page_size=100 when limit is unset (unchanged behavior)', async () => {
+      mockNotion.fileUploads.list.mockResolvedValue({
+        results: [],
+        next_cursor: null,
+        has_more: false
+      })
+
+      await fileUploads(mockNotion as any, { action: 'list' })
+
+      expect(mockNotion.fileUploads.list).toHaveBeenCalledWith(expect.objectContaining({ page_size: 100 }))
+    })
   })
 
   describe('upload (single-step)', () => {

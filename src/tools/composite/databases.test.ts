@@ -336,6 +336,88 @@ describe('databases', () => {
       expect(result.results).toHaveLength(2)
     })
 
+    it('should push limit=1 down to page_size=1 and call query only once', async () => {
+      mockNotion.databases.retrieve.mockResolvedValueOnce(makeDbRetrieveResponse())
+      mockNotion.dataSources.query.mockResolvedValueOnce({
+        results: [{ id: 'p1', url: 'u1', properties: {} }],
+        next_cursor: 'cursor-next',
+        has_more: true
+      })
+
+      await databases(notion, {
+        action: 'query',
+        database_id: 'db-1',
+        limit: 1
+      })
+
+      expect(mockNotion.dataSources.query).toHaveBeenCalledTimes(1)
+      expect(mockNotion.dataSources.query).toHaveBeenCalledWith(expect.objectContaining({ page_size: 1 }))
+    })
+
+    it('should push limit=50 down to page_size=50 in a single call', async () => {
+      mockNotion.databases.retrieve.mockResolvedValueOnce(makeDbRetrieveResponse())
+      mockNotion.dataSources.query.mockResolvedValueOnce({
+        results: Array.from({ length: 50 }, (_, i) => ({ id: `p${i}`, url: `u${i}`, properties: {} })),
+        next_cursor: 'cursor-next',
+        has_more: true
+      })
+
+      const result = (await databases(notion, {
+        action: 'query',
+        database_id: 'db-1',
+        limit: 50
+      })) as QueryDatabaseResponse
+
+      expect(mockNotion.dataSources.query).toHaveBeenCalledTimes(1)
+      expect(mockNotion.dataSources.query).toHaveBeenCalledWith(expect.objectContaining({ page_size: 50 }))
+      expect(result.total).toBe(50)
+    })
+
+    it('should clamp page_size to 100 when limit=250 and make at most 3 calls', async () => {
+      mockNotion.databases.retrieve.mockResolvedValueOnce(makeDbRetrieveResponse())
+      mockNotion.dataSources.query
+        .mockResolvedValueOnce({
+          results: Array.from({ length: 100 }, (_, i) => ({ id: `p${i}`, url: `u${i}`, properties: {} })),
+          next_cursor: 'c1',
+          has_more: true
+        })
+        .mockResolvedValueOnce({
+          results: Array.from({ length: 100 }, (_, i) => ({ id: `p${100 + i}`, url: `u${100 + i}`, properties: {} })),
+          next_cursor: 'c2',
+          has_more: true
+        })
+        .mockResolvedValueOnce({
+          results: Array.from({ length: 100 }, (_, i) => ({ id: `p${200 + i}`, url: `u${200 + i}`, properties: {} })),
+          next_cursor: 'c3',
+          has_more: true
+        })
+
+      const result = (await databases(notion, {
+        action: 'query',
+        database_id: 'db-1',
+        limit: 250
+      })) as QueryDatabaseResponse
+
+      expect(mockNotion.dataSources.query).toHaveBeenCalledTimes(3)
+      expect(mockNotion.dataSources.query).toHaveBeenNthCalledWith(1, expect.objectContaining({ page_size: 100 }))
+      expect(mockNotion.dataSources.query).toHaveBeenNthCalledWith(2, expect.objectContaining({ page_size: 100 }))
+      expect(mockNotion.dataSources.query).toHaveBeenNthCalledWith(3, expect.objectContaining({ page_size: 100 }))
+      expect(result.total).toBe(250)
+    })
+
+    it('should keep page_size=100 when limit is unset (unchanged behavior)', async () => {
+      mockNotion.databases.retrieve.mockResolvedValueOnce(makeDbRetrieveResponse())
+      mockNotion.dataSources.query.mockResolvedValueOnce({
+        results: [],
+        next_cursor: null,
+        has_more: false
+      })
+
+      await databases(notion, { action: 'query', database_id: 'db-1' })
+
+      expect(mockNotion.dataSources.query).toHaveBeenCalledWith(expect.objectContaining({ page_size: 100 }))
+    })
+
     it('should format various property types in results', async () => {
       mockNotion.databases.retrieve.mockResolvedValueOnce(makeDbRetrieveResponse())
       mockNotion.dataSources.query.mockResolvedValueOnce({

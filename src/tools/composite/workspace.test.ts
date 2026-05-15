@@ -203,6 +203,102 @@ describe('workspace', () => {
       expect(result.results).toHaveLength(2)
     })
 
+    it('should push limit=1 down to page_size=1 and call search only once', async () => {
+      mockNotion.search.mockResolvedValue({
+        results: [{ id: 'p1', object: 'page', properties: {}, url: '', last_edited_time: '' }],
+        next_cursor: 'cursor-next',
+        has_more: true
+      })
+
+      await workspace(mockNotion as any, { action: 'search', limit: 1 })
+
+      expect(mockNotion.search).toHaveBeenCalledTimes(1)
+      expect(mockNotion.search).toHaveBeenCalledWith(expect.objectContaining({ page_size: 1 }))
+    })
+
+    it('should push limit=50 down to page_size=50 in a single call', async () => {
+      mockNotion.search.mockResolvedValue({
+        results: Array.from({ length: 50 }, (_, i) => ({
+          id: `p${i}`,
+          object: 'page',
+          properties: {},
+          url: '',
+          last_edited_time: ''
+        })),
+        next_cursor: 'cursor-next',
+        has_more: true
+      })
+
+      const result = (await workspace(mockNotion as any, {
+        action: 'search',
+        limit: 50
+      })) as Extract<WorkspaceResult, { action: 'search' }>
+
+      expect(mockNotion.search).toHaveBeenCalledTimes(1)
+      expect(mockNotion.search).toHaveBeenCalledWith(expect.objectContaining({ page_size: 50 }))
+      expect(result.total).toBe(50)
+    })
+
+    it('should clamp page_size to 100 when limit=250 and make at most 3 calls', async () => {
+      mockNotion.search
+        .mockResolvedValueOnce({
+          results: Array.from({ length: 100 }, (_, i) => ({
+            id: `p${i}`,
+            object: 'page',
+            properties: {},
+            url: '',
+            last_edited_time: ''
+          })),
+          next_cursor: 'c1',
+          has_more: true
+        })
+        .mockResolvedValueOnce({
+          results: Array.from({ length: 100 }, (_, i) => ({
+            id: `p${100 + i}`,
+            object: 'page',
+            properties: {},
+            url: '',
+            last_edited_time: ''
+          })),
+          next_cursor: 'c2',
+          has_more: true
+        })
+        .mockResolvedValueOnce({
+          results: Array.from({ length: 100 }, (_, i) => ({
+            id: `p${200 + i}`,
+            object: 'page',
+            properties: {},
+            url: '',
+            last_edited_time: ''
+          })),
+          next_cursor: 'c3',
+          has_more: true
+        })
+
+      const result = (await workspace(mockNotion as any, {
+        action: 'search',
+        limit: 250
+      })) as Extract<WorkspaceResult, { action: 'search' }>
+
+      expect(mockNotion.search).toHaveBeenCalledTimes(3)
+      expect(mockNotion.search).toHaveBeenNthCalledWith(1, expect.objectContaining({ page_size: 100 }))
+      expect(mockNotion.search).toHaveBeenNthCalledWith(2, expect.objectContaining({ page_size: 100 }))
+      expect(mockNotion.search).toHaveBeenNthCalledWith(3, expect.objectContaining({ page_size: 100 }))
+      expect(result.total).toBe(250)
+    })
+
+    it('should keep page_size=100 when limit is unset (unchanged behavior)', async () => {
+      mockNotion.search.mockResolvedValue({
+        results: [],
+        next_cursor: null,
+        has_more: false
+      })
+
+      await workspace(mockNotion as any, { action: 'search' })
+
+      expect(mockNotion.search).toHaveBeenCalledWith(expect.objectContaining({ page_size: 100 }))
+    })
+
     it('should extract title from Name property for pages', async () => {
       mockNotion.search.mockResolvedValue({
         results: [

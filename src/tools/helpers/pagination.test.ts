@@ -94,6 +94,112 @@ describe('autoPaginate', () => {
 
     expect(fetchFn).toHaveBeenCalledWith(undefined, 50)
   })
+
+  describe('maxItems', () => {
+    it('should clamp first pageSize to maxItems when below 100', async () => {
+      const fetchFn = vi.fn().mockResolvedValueOnce({
+        results: [1],
+        next_cursor: null,
+        has_more: false
+      })
+
+      await autoPaginate(fetchFn, { maxItems: 1 })
+
+      expect(fetchFn).toHaveBeenCalledTimes(1)
+      expect(fetchFn).toHaveBeenCalledWith(undefined, 1)
+    })
+
+    it('should clamp first pageSize to 100 when maxItems exceeds 100', async () => {
+      const fetchFn = vi.fn().mockResolvedValueOnce({
+        results: Array.from({ length: 100 }, (_, i) => i),
+        next_cursor: 'cursor-1',
+        has_more: true
+      })
+
+      // Set maxItems above 100 but only enough to need a single page (100 returned satisfies it)
+      const results = await autoPaginate(fetchFn, { maxItems: 100 })
+
+      expect(fetchFn).toHaveBeenCalledTimes(1)
+      expect(fetchFn).toHaveBeenCalledWith(undefined, 100)
+      expect(results).toHaveLength(100)
+    })
+
+    it('should short-circuit the loop once maxItems is reached', async () => {
+      const fetchFn = vi
+        .fn()
+        .mockResolvedValueOnce({
+          results: [1, 2, 3],
+          next_cursor: 'cursor-1',
+          has_more: true
+        })
+        .mockResolvedValueOnce({
+          results: [4, 5, 6],
+          next_cursor: 'cursor-2',
+          has_more: true
+        })
+
+      const results = await autoPaginate(fetchFn, { maxItems: 4 })
+
+      // After first page (3 items) we still need 1 more, so a second call happens.
+      // After second page we have 6 items, which exceeds maxItems=4: stop here.
+      expect(fetchFn).toHaveBeenCalledTimes(2)
+      expect(results).toHaveLength(4)
+      expect(results).toEqual([1, 2, 3, 4])
+    })
+
+    it('should truncate defensively when last page overshoots maxItems', async () => {
+      const fetchFn = vi.fn().mockResolvedValueOnce({
+        results: [1, 2, 3, 4, 5],
+        next_cursor: null,
+        has_more: false
+      })
+
+      const results = await autoPaginate(fetchFn, { maxItems: 2 })
+
+      expect(results).toEqual([1, 2])
+    })
+
+    it('should not affect behavior when maxItems is unset', async () => {
+      const fetchFn = vi.fn().mockResolvedValueOnce({
+        results: [1, 2, 3],
+        next_cursor: null,
+        has_more: false
+      })
+
+      const results = await autoPaginate(fetchFn)
+
+      expect(fetchFn).toHaveBeenCalledWith(undefined, 100)
+      expect(results).toEqual([1, 2, 3])
+    })
+
+    it('should pass pageSize=100 on subsequent pages when maxItems exceeds 100', async () => {
+      const fetchFn = vi
+        .fn()
+        .mockResolvedValueOnce({
+          results: Array.from({ length: 100 }, (_, i) => i),
+          next_cursor: 'cursor-1',
+          has_more: true
+        })
+        .mockResolvedValueOnce({
+          results: Array.from({ length: 100 }, (_, i) => 100 + i),
+          next_cursor: 'cursor-2',
+          has_more: true
+        })
+        .mockResolvedValueOnce({
+          results: Array.from({ length: 50 }, (_, i) => 200 + i),
+          next_cursor: null,
+          has_more: false
+        })
+
+      const results = await autoPaginate(fetchFn, { maxItems: 250 })
+
+      expect(fetchFn).toHaveBeenCalledTimes(3)
+      expect(fetchFn).toHaveBeenNthCalledWith(1, undefined, 100)
+      expect(fetchFn).toHaveBeenNthCalledWith(2, 'cursor-1', 100)
+      expect(fetchFn).toHaveBeenNthCalledWith(3, 'cursor-2', 100)
+      expect(results).toHaveLength(250)
+    })
+  })
 })
 
 describe('fetchChildrenRecursive', () => {
