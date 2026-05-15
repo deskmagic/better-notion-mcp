@@ -12,6 +12,22 @@ maintained at [deskmagic/better-notion-mcp](https://github.com/deskmagic/better-
 
 ---
 
+## Upstream direction (HARD RULE)
+
+The relationship to upstream is **one-way: pull-only, never push**.
+
+| Direction | Allowed? | Notes |
+|-----------|----------|-------|
+| `upstream → origin` (fetch + merge) | **Mandatory** before any other work | Step 1 of the workflow below. Keeps us current and avoids double work. |
+| `origin → upstream` (push) | **Strictly forbidden** | No `git push upstream …`, ever. |
+| `origin → upstream` (PR) | **Strictly forbidden** | No `gh pr create --repo n24q02m/…`, ever. No exceptions, no "deliberate decisions," no agent autonomy here. |
+
+If you believe an upstream PR is warranted, **stop and surface that thought to Alexander as a conversation**. Do not open it, do not draft it, do not push the branch to a name that hints at one. The fork is the deploy target; upstream is not our concern.
+
+Rationale: upstream PRs are public, reputationally weighted, and create coordination overhead we don't want. The fork exists precisely so we can move quickly without negotiating with upstream maintainers. Treat upstream as a read-only dependency.
+
+---
+
 ## Mandatory Workflow (in order, no skipping steps)
 
 ### Step 1 — Sync upstream FIRST, before any other work
@@ -26,8 +42,8 @@ git push origin main
 
 This must happen before writing any code. It ensures:
 - Our work applies cleanly to the current upstream state
-- Upstream PR branches are conflict-free from the start
-- We don't discover conflicts only after a PR already exists
+- We don't accidentally re-do something upstream already fixed
+- Fork PRs against `main` are conflict-free from the start
 
 ### Step 2 — Write the failing test
 
@@ -57,41 +73,7 @@ gh pr create --repo deskmagic/better-notion-mcp --base main --head fix/my-fix
 
 This is our internal deploy path. No special restrictions.
 
-### Step 5 — Consciously decide whether to open an upstream PR
-
-**This is a deliberate, explicit decision — never automatic.**
-
-Upstream PRs are public and carry reputational weight. Ask:
-- Is this fix useful to the broader community (not just our fork)?
-- Does it follow upstream's style and contribution guidelines?
-- Are there no fork-specific files (FORK.md, local configs, etc.) in the diff?
-
-If yes, create a clean branch off `upstream/main`:
-
-```bash
-git checkout -b upstream-pr/fix-my-fix upstream/main
-# Apply only the upstream-relevant changes (NOT FORK.md or fork-specific files)
-bun run preflight   # must pass — CI will run the same checks
-
-git push origin upstream-pr/fix-my-fix
-gh pr create --repo n24q02m/better-notion-mcp --base main \
-  --head deskmagic:upstream-pr/fix-my-fix \
-  --title "fix: ..." --body "..."
-```
-
-Agents and automated workflows must NEVER run `gh pr create --repo n24q02m/...`
-without explicit instruction from Alexander.
-
----
-
-## Fork-specific files (never send to upstream)
-
-These files exist only in the fork and must be excluded from upstream PRs:
-
-- `FORK.md` (this file)
-
-When cherry-picking or creating upstream branches, always verify the diff
-does not include these files before pushing.
+There is no Step 5. The workflow ends here — see the "Upstream direction" section above for why opening an upstream PR is not an option.
 
 ---
 
