@@ -240,7 +240,7 @@ async function retrieveFileUpload(notion: Client, input: FileUploadsInput): Prom
 async function listFileUploads(notion: Client, input: FileUploadsInput): Promise<any> {
   // Push the caller-supplied limit down into page_size so a small limit
   // doesn't enumerate every file upload in the workspace.
-  const maxItems = input.limit && input.limit > 0 ? input.limit : undefined
+  const limit = input.limit && input.limit > 0 ? input.limit : undefined
   const results = await autoPaginate(
     async (cursor, pageSize) => {
       const response: any = await (notion as any).fileUploads.list({
@@ -253,7 +253,7 @@ async function listFileUploads(notion: Client, input: FileUploadsInput): Promise
         has_more: response.has_more
       }
     },
-    { maxItems }
+    { limit }
   )
 
   return {

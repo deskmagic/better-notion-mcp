@@ -85,7 +85,7 @@ export interface PagesInput {
 
   // Create/Update params
   title?: string
-  content?: string // Markdown
+  content?: string // Markdown (defaults to append, use replace: true to overwrite)
   append_content?: string
   parent_id?: string
   properties?: Record<string, any>
@@ -102,6 +102,7 @@ export interface PagesInput {
 
   // Archive/Restore params
   archived?: boolean
+  replace?: boolean
 }
 
 /**
@@ -482,24 +483,26 @@ async function updatePage(notion: Client, input: PagesInput): Promise<UpdatePage
   // Handle content updates
   if (input.content || input.append_content) {
     if (input.content) {
-      // Replace all content
-      // Optimized: Fetch all blocks using autoPaginate, then delete them in batches.
-      const existingBlocks = await autoPaginate((cursor) =>
-        notion.blocks.children.list({
-          block_id: input.page_id!,
-          page_size: 100,
-          start_cursor: cursor
-        })
-      )
-
-      if (existingBlocks.length > 0) {
-        await processBatches(
-          existingBlocks,
-          async (block) => {
-            await notion.blocks.delete({ block_id: block.id })
-          },
-          { batchSize: 1, concurrency: 5 }
+      // Delete existing content only if replace: true is explicitly set
+      if (input.replace) {
+        // Optimized: Fetch all blocks using autoPaginate, then delete them in batches.
+        const existingBlocks = await autoPaginate((cursor) =>
+          notion.blocks.children.list({
+            block_id: input.page_id!,
+            page_size: 100,
+            start_cursor: cursor
+          })
         )
+
+        if (existingBlocks.length > 0) {
+          await processBatches(
+            existingBlocks,
+            async (block) => {
+              await notion.blocks.delete({ block_id: block.id })
+            },
+            { batchSize: 1, concurrency: 5 }
+          )
+        }
       }
 
       const newBlocks = markdownToBlocks(input.content)

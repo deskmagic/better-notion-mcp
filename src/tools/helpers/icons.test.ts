@@ -32,6 +32,14 @@ describe('formatIcon', () => {
         external: { url: 'http://example.com/icon.svg' }
       })
     })
+
+    it('wraps a complex URL with query parameters', () => {
+      const url = 'https://example.com/path?query=val#hash'
+      expect(formatIcon(url)).toEqual({
+        type: 'external',
+        external: { url }
+      })
+    })
   })
 
   describe('Notion built-in icon shorthand', () => {
@@ -53,6 +61,13 @@ describe('formatIcon', () => {
       expect(formatIcon('star:lightgray')).toEqual({
         type: 'icon',
         icon: { name: 'star', color: 'lightgray' }
+      })
+    })
+
+    it('expands with orange color', () => {
+      expect(formatIcon('fire:orange')).toEqual({
+        type: 'icon',
+        icon: { name: 'fire', color: 'orange' }
       })
     })
 
@@ -116,7 +131,7 @@ describe('formatIcon', () => {
 
   describe('empty string input', () => {
     it('throws NotionMCPError for empty string', () => {
-      expect(() => formatIcon('')).toThrow(NotionMCPError)
+      expect(() => formatIcon('')).toThrow(/Icon value cannot be empty/)
     })
   })
 
@@ -131,6 +146,22 @@ describe('formatIcon', () => {
 
     it('rejects vbscript: URLs', () => {
       expect(() => formatIcon('vbscript:msgbox(1)')).toThrow(NotionMCPError)
+    })
+
+    it('rejects http URLs with whitespace', () => {
+      expect(() => formatIcon('https://example.com/icon .png')).toThrow(NotionMCPError)
+    })
+  })
+
+  describe('edge cases', () => {
+    it('does not treat a leading colon as shorthand', () => {
+      // ':blue' has colonIdx 0, which is < 1, so it falls through to emoji
+      // then isSafeUrl(':blue') returns false because it's a relative URL with a colon
+      expect(() => formatIcon(':blue')).toThrow(NotionMCPError)
+    })
+
+    it('treats a plain string as emoji', () => {
+      expect(formatIcon('star')).toEqual({ type: 'emoji', emoji: 'star' })
     })
   })
 })

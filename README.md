@@ -74,7 +74,7 @@ mcp-name: io.github.n24q02m/better-notion-mcp
 >
 > Past months saw significant churn around credential handling and the daemon-bridge auto-spawn pattern. This caused multi-process races, browser tab spam, and inconsistent setup UX across plugins. **As of v<auto>, the architecture is stable**: 2 clean modes (stdio + HTTP), no daemon-bridge layer, no auto-spawn from stdio.
 >
-> Apologies for the instability period. If you encountered issues with prior versions, please update to v<auto>+ and follow the current `docs/setup-manual.md` -- most prior workarounds are no longer needed.
+> Apologies for the instability period. If you encountered issues with prior versions, please update to v<auto>+ and follow the current [Setup guide](https://mcp.n24q02m.com/servers/better-notion-mcp/setup/) -- most prior workarounds are no longer needed.
 >
 > **Related plugins from the same author**:
 > - [wet-mcp](https://github.com/n24q02m/wet-mcp) -- Web search + content extraction
@@ -134,11 +134,12 @@ Full docs at **[mcp.n24q02m.com/servers/better-notion-mcp/](https://mcp.n24q02m.
 |:---------|:---------|:--------|:------------|
 | `NOTION_TOKEN` | Yes (stdio) | - | Notion integration token |
 | `TRANSPORT_MODE` | No | `stdio` | Set to `http` for remote mode |
-| `PUBLIC_URL` | Yes (http) | - | Server's public URL for OAuth redirects |
+| `PUBLIC_URL` | No (http) | - | Server's public URL for OAuth redirect links |
 | `NOTION_OAUTH_CLIENT_ID` | Yes (http) | - | Notion Public Integration client ID |
 | `NOTION_OAUTH_CLIENT_SECRET` | Yes (http) | - | Notion Public Integration client secret |
-| `DCR_SERVER_SECRET` | Yes (http) | - | HMAC secret for stateless client registration |
-| `PORT` | No | `8080` | Server port |
+| `MCP_AUTH_DISABLE` | No (http) | - | Set to `1` to skip Bearer JWT verification when behind an external auth gateway |
+| `PORT` | No | `0` (OS-assigned) | Server port; set explicitly (e.g. `8080`) to bind a fixed port |
+| `HOST` | No | - | Bind address (http mode) |
 
 ### Self-Hosting (Remote Mode)
 
@@ -152,10 +153,10 @@ You can self-host the remote server with your own Notion OAuth app.
 ```bash
 docker run -p 8080:8080 \
   -e TRANSPORT_MODE=http \
+  -e PORT=8080 \
   -e PUBLIC_URL=https://your-domain.com \
   -e NOTION_OAUTH_CLIENT_ID=your-client-id \
   -e NOTION_OAUTH_CLIENT_SECRET=your-client-secret \
-  -e DCR_SERVER_SECRET=$(openssl rand -hex 32) \
   n24q02m/better-notion-mcp:latest
 ```
 

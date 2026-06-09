@@ -95,36 +95,36 @@ describe('autoPaginate', () => {
     expect(fetchFn).toHaveBeenCalledWith(undefined, 50)
   })
 
-  describe('maxItems', () => {
-    it('should clamp first pageSize to maxItems when below 100', async () => {
+  describe('limit', () => {
+    it('should clamp first pageSize to limit when below 100', async () => {
       const fetchFn = vi.fn().mockResolvedValueOnce({
         results: [1],
         next_cursor: null,
         has_more: false
       })
 
-      await autoPaginate(fetchFn, { maxItems: 1 })
+      await autoPaginate(fetchFn, { limit: 1 })
 
       expect(fetchFn).toHaveBeenCalledTimes(1)
       expect(fetchFn).toHaveBeenCalledWith(undefined, 1)
     })
 
-    it('should clamp first pageSize to 100 when maxItems exceeds 100', async () => {
+    it('should clamp first pageSize to 100 when limit exceeds 100', async () => {
       const fetchFn = vi.fn().mockResolvedValueOnce({
         results: Array.from({ length: 100 }, (_, i) => i),
         next_cursor: 'cursor-1',
         has_more: true
       })
 
-      // Set maxItems above 100 but only enough to need a single page (100 returned satisfies it)
-      const results = await autoPaginate(fetchFn, { maxItems: 100 })
+      // Set limit above 100 but only enough to need a single page (100 returned satisfies it)
+      const results = await autoPaginate(fetchFn, { limit: 100 })
 
       expect(fetchFn).toHaveBeenCalledTimes(1)
       expect(fetchFn).toHaveBeenCalledWith(undefined, 100)
       expect(results).toHaveLength(100)
     })
 
-    it('should short-circuit the loop once maxItems is reached', async () => {
+    it('should short-circuit the loop once limit is reached', async () => {
       const fetchFn = vi
         .fn()
         .mockResolvedValueOnce({
@@ -138,28 +138,28 @@ describe('autoPaginate', () => {
           has_more: true
         })
 
-      const results = await autoPaginate(fetchFn, { maxItems: 4 })
+      const results = await autoPaginate(fetchFn, { limit: 4 })
 
       // After first page (3 items) we still need 1 more, so a second call happens.
-      // After second page we have 6 items, which exceeds maxItems=4: stop here.
+      // After second page we have 6 items, which exceeds limit=4: stop here.
       expect(fetchFn).toHaveBeenCalledTimes(2)
       expect(results).toHaveLength(4)
       expect(results).toEqual([1, 2, 3, 4])
     })
 
-    it('should truncate defensively when last page overshoots maxItems', async () => {
+    it('should truncate defensively when last page overshoots limit', async () => {
       const fetchFn = vi.fn().mockResolvedValueOnce({
         results: [1, 2, 3, 4, 5],
         next_cursor: null,
         has_more: false
       })
 
-      const results = await autoPaginate(fetchFn, { maxItems: 2 })
+      const results = await autoPaginate(fetchFn, { limit: 2 })
 
       expect(results).toEqual([1, 2])
     })
 
-    it('should not affect behavior when maxItems is unset', async () => {
+    it('should not affect behavior when limit is unset', async () => {
       const fetchFn = vi.fn().mockResolvedValueOnce({
         results: [1, 2, 3],
         next_cursor: null,
@@ -172,7 +172,7 @@ describe('autoPaginate', () => {
       expect(results).toEqual([1, 2, 3])
     })
 
-    it('should clamp pageSize to remaining budget on subsequent pages when maxItems exceeds 100', async () => {
+    it('should clamp pageSize to remaining budget on subsequent pages when limit exceeds 100', async () => {
       const fetchFn = vi
         .fn()
         .mockResolvedValueOnce({
@@ -191,7 +191,7 @@ describe('autoPaginate', () => {
           has_more: false
         })
 
-      const results = await autoPaginate(fetchFn, { maxItems: 250 })
+      const results = await autoPaginate(fetchFn, { limit: 250 })
 
       // Three pages requested; pageSize on each clamps to min(100, remaining budget).
       expect(fetchFn).toHaveBeenCalledTimes(3)
@@ -413,5 +413,42 @@ describe('ConcurrencyQueue', () => {
     await expect(queue.run(task1)).rejects.toThrow('boom')
     await expect(queue.run(task2)).rejects.toThrow('Queue stopped due to previous error')
     expect(task2).not.toHaveBeenCalled()
+  })
+})
+
+describe('autoPaginate with limit', () => {
+  it('should respect the limit and stop fetching', async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValueOnce({ results: [1, 2], next_cursor: 'c1', has_more: true })
+      .mockResolvedValueOnce({ results: [3, 4], next_cursor: 'c2', has_more: true })
+      .mockResolvedValueOnce({ results: [5, 6], next_cursor: null, has_more: false })
+
+    const results = await autoPaginate(fetchFn, { limit: 3, pageSize: 2 })
+
+    expect(results).toEqual([1, 2, 3])
+    expect(fetchFn).toHaveBeenCalledTimes(2)
+    // First call: pageSize 2
+    expect(fetchFn).toHaveBeenNthCalledWith(1, undefined, 2)
+    // Second call: pageSize 1 (remaining 1)
+    expect(fetchFn).toHaveBeenNthCalledWith(2, 'c1', 1)
+  })
+
+  it('should return all results if limit is higher than total', async () => {
+    const fetchFn = vi.fn().mockResolvedValueOnce({ results: [1, 2], next_cursor: null, has_more: false })
+
+    const results = await autoPaginate(fetchFn, { limit: 10, pageSize: 2 })
+
+    expect(results).toEqual([1, 2])
+    expect(fetchFn).toHaveBeenCalledTimes(1)
+  })
+
+  it('should handle limit of 0 (unlimited)', async () => {
+    const fetchFn = vi.fn().mockResolvedValueOnce({ results: [1, 2], next_cursor: null, has_more: false })
+
+    const results = await autoPaginate(fetchFn, { limit: 0, pageSize: 2 })
+
+    expect(results).toEqual([1, 2])
+    expect(fetchFn).toHaveBeenCalledTimes(1)
   })
 })

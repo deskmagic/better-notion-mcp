@@ -345,6 +345,20 @@ describe('convertToNotionProperties', () => {
         Project: { relation: [{ id: '[123]' }] }
       })
     })
+
+    it('passes through non-string non-array values as-is (coverage for line 36)', () => {
+      // If the value is a number, it will be auto-detected as a number property
+      const result = convertToNotionProperties({ Project: 123 }, { Project: 'relation' })
+      expect(result).toEqual({
+        Project: { number: 123 }
+      })
+    })
+  })
+
+  it('passes through unsupported types as-is (e.g. BigInt) (coverage for line 114)', () => {
+    const bigIntValue = BigInt(9007199254740991)
+    const result = convertToNotionProperties({ BigField: bigIntValue })
+    expect(result).toEqual({ BigField: bigIntValue })
   })
 
   describe('mixed properties with schema', () => {
@@ -695,5 +709,64 @@ describe('extractPageProperties', () => {
     expect(extractPageProperties(null)).toEqual({})
     expect(extractPageProperties(undefined)).toEqual({})
     expect(extractPageProperties({})).toEqual({})
+  })
+
+  it('only reads p.type once per iteration (uses cached local)', () => {
+    // Define a getter for `type` that counts accesses. The optimized
+    // extractor caches the value into a local on the first read, so the
+    // remaining 20+ branches in the if/else chain don't trigger the getter.
+    let typeReads = 0
+    const props: any = {
+      Name: new Proxy(
+        { title: [{ plain_text: 'X' }], _type: 'title' },
+        {
+          get(target, prop) {
+            if (prop === 'type') {
+              typeReads++
+              return target._type
+            }
+            return (target as any)[prop]
+          }
+        }
+      )
+    }
+    expect(extractPageProperties(props)).toEqual({ Name: 'X' })
+    expect(typeReads).toBe(1)
+  })
+
+  it('extracts files with mixed file/external/name shapes', () => {
+    const props = {
+      Files: {
+        type: 'files',
+        files: [
+          { file: { url: 'https://internal/file1.pdf' }, name: 'A' },
+          { external: { url: 'https://external/file2.png' }, name: 'B' },
+          { name: 'just-a-name.txt' }
+        ]
+      }
+    }
+    expect(extractPageProperties(props)).toEqual({
+      Files: ['https://internal/file1.pdf', 'https://external/file2.png', 'just-a-name.txt']
+    })
+  })
+
+  it('extracts people with names + ids fallback', () => {
+    const props = {
+      Owners: {
+        type: 'people',
+        people: [{ name: 'Alice', id: 'u1' }, { id: 'u2' }]
+      }
+    }
+    expect(extractPageProperties(props)).toEqual({ Owners: ['Alice', 'u2'] })
+  })
+
+  it('extracts date range', () => {
+    const props = {
+      Window: {
+        type: 'date',
+        date: { start: '2026-01-01', end: '2026-01-31' }
+      }
+    }
+    expect(extractPageProperties(props)).toEqual({ Window: '2026-01-01 to 2026-01-31' })
   })
 })

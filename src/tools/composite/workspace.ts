@@ -111,10 +111,7 @@ export async function workspace(notion: Client, input: WorkspaceInput): Promise<
           }
         }
 
-        // Fetch results with pagination. When a limit is provided we push it
-        // down into the Notion API's page_size and short-circuit pagination
-        // so callers asking for "limit: 1" don't pay for a full enumeration.
-        const maxItems = input.limit && input.limit > 0 ? input.limit : undefined
+        // Fetch results with pagination
         const results = await autoPaginate(
           (cursor, pageSize) =>
             notion.search({
@@ -122,7 +119,7 @@ export async function workspace(notion: Client, input: WorkspaceInput): Promise<
               start_cursor: cursor,
               page_size: pageSize
             }),
-          { maxItems }
+          { limit: input.limit }
         )
 
         const formattedResults = new Array(results.length)
