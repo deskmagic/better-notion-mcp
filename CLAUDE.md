@@ -1,6 +1,6 @@
 # CLAUDE.md - better-notion-mcp (DeskMagic fork)
 
-Fork of [n24q02m/better-notion-mcp](https://github.com/n24q02m/better-notion-mcp). Upstream is `upstream`, our fork is `origin` (`reasn/better-notion-mcp`).
+Fork of [n24q02m/better-notion-mcp](https://github.com/n24q02m/better-notion-mcp). Upstream is `upstream`, our fork is `origin` (`deskmagic/better-notion-mcp`).
 
 ## Issue Tracking
 
