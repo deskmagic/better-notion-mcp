@@ -34,3 +34,26 @@
 **Vulnerability:** Untrusted content returned from external APIs was wrapped in `<untrusted_notion_content>` tags. The regex used to sanitize payload breakout attempts (`/<\/untrusted_notion_content\s*>/gi`) only matched trailing whitespace. An attacker could bypass this wrapper by injecting arbitrary attributes into the closing tag within their payload (e.g., `</untrusted_notion_content bypass="true">`), prematurely escaping the security boundary.
 **Learning:** Security boundaries relying on XML/HTML-style tags must account for the leniency of the underlying parsers (including LLMs). Exact matches or simple whitespace checks fail when attackers exploit syntax flexibility, such as tag attributes, which are normally invalid in closing tags but tolerated by parsers.
 **Prevention:** When sanitizing closing tags for prompt injection defense, use a regex that matches any character except the closing angle bracket (e.g., `[^>]*`) to neutralize all variations, padding, and attributes that could be used for evasion.
+
+## 2026-06-10 - Missing tests for normalizeId
+**Vulnerability:** N/A (Testing Task)
+**Learning:** `normalizeId` is a stable utility used for ID comparison. Comprehensive testing should verify that it only removes hyphens and does not affect case or other whitespace characters (tabs, newlines), ensuring consistency across the MCP server.
+**Prevention:** Always verify that utility functions have tests covering not just the happy path but also the preservation of non-target characters like case and whitespace.
+## 2026-06-13 - Prevent greedy regex data loss in XPIA wrapper sanitization
+**Vulnerability:** The previous `wrapToolResult` regex `/<\/untrusted_notion_content[^>]*>/gi` used a greedy `[^>]*` match to handle malformed tags, which caused severe data loss regressions when applied to JSON payloads containing tags without a closing `>` bracket.
+**Learning:** When writing sanitization regular expressions to strip or neutralize HTML/XML-like tags in unparsed JSON payloads, greedy wildcard patterns like `[^>]*` or `.*` must be avoided as they can consume all trailing characters, effectively destroying the JSON structure.
+**Prevention:** Match exact tag prefixes instead (e.g., `/<[/]?untrusted_notion_content/gi`) to safely neutralize tags without risking over-consumption.
+## 2026-06-21 - Path Traversal via basename('..')
+**Vulnerability:** The `ReadResourceRequestSchema` handler relied on `basename(resource.file)` to prevent path traversal when reading files from `DOCS_DIR`. However, `basename('..')` evaluates to `'..'`, meaning `join(DOCS_DIR, basename('..'))` resolved to the parent directory, allowing an attacker to escape the intended directory boundary.
+**Learning:** `path.basename` is insufficient on its own for sanitizing file paths to prevent traversal because it passes `'..'` through unmodified.
+**Prevention:** To prevent path traversal in Node.js file operations, always explicitly verify that the final joined path falls within the intended base directory using `fullPath.startsWith(BASE_DIR)` after resolving it.
+
+## 2026-06-21 - Adjacent-directory traversal and cross-platform containment in registry.ts
+**Vulnerability:** The `startsWith(DOCS_DIR)` containment check in the documentation resource and help-tool handlers had two flaws: (1) without a trailing separator it permitted access to adjacent directories sharing the prefix (e.g. `DOCS_DIR` `/app/docs` matched `/app/docs-hacked/`); (2) string-prefix checks are separator-sensitive, so a naive `startsWith(DOCS_DIR + sep)` fix rejected legitimate reads on Windows where the path separator differs from forward-slash mocks/resolved paths.
+**Learning:** String-prefix comparison is the wrong primitive for directory containment. It conflates lexical prefixes with directory boundaries and is inherently OS-separator-sensitive.
+**Prevention:** Compute `const rel = relative(DOCS_DIR, fullPath)` and reject when `rel === '..' || rel.startsWith('..' + sep) || isAbsolute(rel)`. This is separator-agnostic (uses `path` internals), correctly rejects adjacent and parent directories, and passes uniformly across Linux, macOS, and Windows.
+
+## 2025-05-22 - Direct KV Mapping in Cloudflare Worker Proxy
+**Vulnerability:** Direct path-to-key mapping in a KV outbound handler allowed potentially unauthorized access to the KV namespace from the container.
+**Learning:** Even internal interception layers should validate their inputs (like KV keys) against an allowed namespace or prefix, as the "path" part of the URL is often directly derived from untrusted application-level data.
+**Prevention:** Enforce strict key prefix validation and reject directory traversal sequences (e.g., `/../`) in any handler that maps URLs to a flat key-value store.

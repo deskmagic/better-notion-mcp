@@ -5,7 +5,7 @@
 
 import type { Client } from '@notionhq/client'
 import { formatCover } from '../helpers/covers.js'
-import { NotionMCPError, withErrorHandling } from '../helpers/errors.js'
+import { NotionMCPError, retryWithBackoff, withErrorHandling } from '../helpers/errors.js'
 import { formatIcon, resolveIcon } from '../helpers/icons.js'
 import { normalizeId } from '../helpers/id.js'
 import { autoPaginate, processBatches } from '../helpers/pagination.js'
@@ -15,6 +15,7 @@ import * as RichText from '../helpers/richtext.js'
 // Cache for data source schema (properties)
 export const schemaCache = new Map<string, { properties: any; expiresAt: number }>()
 const SCHEMA_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+export const resolutionCache = new Map<string, { databaseId: string; dataSourceId: string; expiresAt: number }>()
 
 /**
  * Get data source properties with caching
@@ -47,27 +48,24 @@ function buildSearchFilter(properties: any, search: string): any | null {
   if (!properties) return null
 
   const keys = Object.keys(properties)
-  const textProps: string[] = []
+  const or: any[] = []
+
   for (let i = 0; i < keys.length; i++) {
     const name = keys[i]
     const type = properties[name].type
-    if (type === 'title' || type === 'rich_text') {
-      textProps.push(name)
+
+    switch (type) {
+      case 'title':
+      case 'rich_text':
+        or.push({
+          property: name,
+          rich_text: { contains: search }
+        })
+        break
     }
   }
 
-  if (textProps.length > 0) {
-    const or = new Array(textProps.length)
-    for (let i = 0; i < textProps.length; i++) {
-      or[i] = {
-        property: textProps[i],
-        rich_text: { contains: search }
-      }
-    }
-    return { or }
-  }
-
-  return null
+  return or.length > 0 ? { or } : null
 }
 
 /**
@@ -251,11 +249,18 @@ export type DatabasesResponse =
 async function resolveDataSourceId(notion: Client, id: string): Promise<{ databaseId: string; dataSourceId: string }> {
   const normalized = normalizeId(id)
 
+  const cached = resolutionCache.get(normalized)
+  if (cached && Date.now() < cached.expiresAt) {
+    return { databaseId: cached.databaseId, dataSourceId: cached.dataSourceId }
+  }
+
   // Try as database container first
   try {
     const database: any = await notion.databases.retrieve({ database_id: normalized })
     if (database.data_sources?.length > 0) {
-      return { databaseId: database.id, dataSourceId: database.data_sources[0].id }
+      const result = { databaseId: database.id, dataSourceId: database.data_sources[0].id }
+      resolutionCache.set(normalized, { ...result, expiresAt: Date.now() + SCHEMA_CACHE_TTL })
+      return result
     }
     throw new NotionMCPError(
       'Database has no data sources',
@@ -269,10 +274,12 @@ async function resolveDataSourceId(notion: Client, id: string): Promise<{ databa
     if (error.code === 'object_not_found') {
       try {
         const ds: any = await (notion as any).dataSources.retrieve({ data_source_id: normalized })
-        return {
+        const result = {
           databaseId: ds.parent?.database_id || normalized,
           dataSourceId: ds.id
         }
+        resolutionCache.set(normalized, { ...result, expiresAt: Date.now() + SCHEMA_CACHE_TTL })
+        return result
       } catch {
         throw new NotionMCPError(
           `ID "${id}" is not a valid database or data source`,
@@ -553,20 +560,26 @@ async function createDatabasePages(notion: Client, input: DatabasesInput): Promi
     }
   }
 
-  const results = await processBatches(items, async (item) => {
-    const properties = convertToNotionProperties(item.properties, schema)
+  const results = await processBatches(
+    items,
+    async (item) => {
+      const properties = convertToNotionProperties(item.properties, schema)
 
-    const page = await notion.pages.create({
-      parent: { type: 'data_source_id', data_source_id: dataSourceId },
-      properties
-    } as any)
+      const page = await retryWithBackoff(async () =>
+        notion.pages.create({
+          parent: { type: 'data_source_id', data_source_id: dataSourceId },
+          properties
+        } as any)
+      )
 
-    return {
-      page_id: page.id,
-      url: (page as any).url,
-      created: true
-    }
-  })
+      return {
+        page_id: page.id,
+        url: (page as any).url,
+        created: true
+      }
+    },
+    { batchSize: 5, concurrency: 3 }
+  )
 
   return {
     action: 'create_page',
@@ -601,23 +614,29 @@ async function updateDatabasePages(notion: Client, input: DatabasesInput): Promi
     }
   }
 
-  const results = await processBatches(items, async (item) => {
-    if (!item.page_id) {
-      throw new NotionMCPError('page_id required for each item', 'VALIDATION_ERROR', 'Provide page_id')
-    }
+  const results = await processBatches(
+    items,
+    async (item) => {
+      if (!item.page_id) {
+        throw new NotionMCPError('page_id required for each item', 'VALIDATION_ERROR', 'Provide page_id')
+      }
 
-    const properties = convertToNotionProperties(item.properties)
+      const properties = convertToNotionProperties(item.properties)
 
-    await notion.pages.update({
-      page_id: item.page_id,
-      properties
-    })
+      await retryWithBackoff(async () =>
+        notion.pages.update({
+          page_id: item.page_id!,
+          properties
+        })
+      )
 
-    return {
-      page_id: item.page_id,
-      updated: true
-    }
-  })
+      return {
+        page_id: item.page_id,
+        updated: true
+      }
+    },
+    { batchSize: 5, concurrency: 3 }
+  )
 
   return {
     action: 'update_page',
@@ -652,10 +671,12 @@ async function deleteDatabasePages(notion: Client, input: DatabasesInput): Promi
   const results = await processBatches(
     pageIds,
     async (pageId) => {
-      await notion.pages.update({
-        page_id: pageId,
-        archived: true
-      })
+      await retryWithBackoff(async () =>
+        notion.pages.update({
+          page_id: pageId,
+          archived: true
+        })
+      )
 
       return {
         page_id: pageId,

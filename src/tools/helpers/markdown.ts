@@ -68,6 +68,11 @@ const CHECKED_LIST_REGEX = /^\s*[-*+]\s\[([ xX])\](?:\s|$)/
 const BULLETED_LIST_REGEX = /^\s*[-*+]\s/
 const NUMBERED_LIST_REGEX = /^\s*\d+\.\s/
 const DIVIDER_REGEX = /^[-*]{3,}$/
+const MENTION_ID_REGEX = /([a-f0-9]{32})/
+const INLINE_SUMMARY_REGEX = /^<details>\s*<summary>(.*?)<\/summary>(.*?)(<\/details>)?$/
+const SUMMARY_REGEX = /<summary>(.*?)<\/summary>/
+const COLUMN_REGEX = /^:::column(?:\{width=([\d.]+)\})?$/
+const TABLE_SEPARATOR_REGEX = /^[-:]+$/
 
 /**
  * Convert markdown string to Notion blocks
@@ -89,7 +94,9 @@ class MarkdownParser {
 
     // Flush remaining list
     if (this.currentList.length > 0) {
-      this.blocks.push(...this.currentList)
+      for (let j = 0; j < this.currentList.length; j++) {
+        this.blocks.push(this.currentList[j])
+      }
     }
 
     return this.blocks
@@ -100,7 +107,9 @@ class MarkdownParser {
 
     // Flush list if we're not in a list anymore
     if (this.currentListType && !isListItem(line)) {
-      this.blocks.push(...this.currentList)
+      for (let j = 0; j < this.currentList.length; j++) {
+        this.blocks.push(this.currentList[j])
+      }
       this.currentList = []
       this.currentListType = null
     }
@@ -524,7 +533,7 @@ class InlineParser {
           const mentionTarget = this.text.slice(closeBracket + 2, closeParen)
 
           // Extract 32-char hex page ID from Notion URL or use as-is
-          const idMatch = mentionTarget.match(/([a-f0-9]{32})/)
+          const idMatch = mentionTarget.match(MENTION_ID_REGEX)
           const pageId = idMatch ? idMatch[1] : mentionTarget
 
           this.richText.push(
@@ -809,15 +818,19 @@ function parseTable(lines: string[], startIndex: number): TableParseResult | nul
 
   if (parsedRows.length >= 2) {
     const possibleSeparator = parsedRows[1]
-    const isSeparator = possibleSeparator.every((cell: string) => /^[-:]+$/.test(cell.trim()))
+    const isSeparator = possibleSeparator.every((cell: string) => TABLE_SEPARATOR_REGEX.test(cell.trim()))
 
     if (isSeparator) {
       hasHeader = true
       headerRow = parsedRows[0]
-      dataRows.push(...parsedRows.slice(2))
+      for (let j = 2; j < parsedRows.length; j++) {
+        dataRows.push(parsedRows[j])
+      }
     } else {
       headerRow = parsedRows[0]
-      dataRows.push(...parsedRows.slice(1))
+      for (let j = 1; j < parsedRows.length; j++) {
+        dataRows.push(parsedRows[j])
+      }
     }
   } else {
     headerRow = parsedRows[0]
@@ -849,7 +862,7 @@ function parseToggle(lines: string[], startIndex: number): ToggleParseResult {
   const detailsLine = lines[i].trim()
 
   // Try to extract <summary>...</summary> from the <details> line itself
-  const inlineSummaryMatch = detailsLine.match(/^<details>\s*<summary>(.*?)<\/summary>(.*?)(<\/details>)?$/)
+  const inlineSummaryMatch = detailsLine.match(INLINE_SUMMARY_REGEX)
 
   if (inlineSummaryMatch) {
     // All-on-one-line or inline summary: <details><summary>Title</summary>[Content][</details>]
@@ -878,7 +891,7 @@ function parseToggle(lines: string[], startIndex: number): ToggleParseResult {
 
     // Look for <summary>...</summary> on the next line
     if (i < lines.length) {
-      const summaryMatch = lines[i].match(/<summary>(.*?)<\/summary>/)
+      const summaryMatch = lines[i].match(SUMMARY_REGEX)
       if (summaryMatch) {
         title = summaryMatch[1]
         i++
@@ -942,7 +955,7 @@ function parseColumns(lines: string[], startIndex: number): ColumnParseResult {
       break
     }
 
-    const columnMatch = line.match(/^:::column(?:\{width=([\d.]+)\})?$/)
+    const columnMatch = line.match(COLUMN_REGEX)
     if (columnMatch) {
       // Flush previous column (even if empty)
       if (inColumn) {

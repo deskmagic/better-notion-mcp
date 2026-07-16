@@ -34,8 +34,11 @@ export function formatId(id: string): string {
   return `${clean.slice(0, 8)}-${clean.slice(8, 12)}-${clean.slice(12, 16)}-${clean.slice(16, 20)}-${clean.slice(20)}`
 }
 
-/** Maximum length for base64 string to prevent OOM during validation (64MB) */
-const MAX_BASE64_LENGTH = 64 * 1024 * 1024
+/** Maximum length for base64 string to prevent OOM during validation (20MB) to mitigate OOM attacks prior to canonicality check */
+const MAX_BASE64_LENGTH = 20 * 1024 * 1024
+
+// BOLT OPTIMIZATION: Cache regex at module level to avoid compiling literal on every file_content validation
+const BASE64_REGEX = /^[A-Za-z0-9+/]*={0,2}$/
 
 /**
  * Check if a string is valid base64 encoding
@@ -48,7 +51,7 @@ export function isValidBase64(str: string): boolean {
   }
 
   // Basic regex check for character set and padding structure
-  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(str)) {
+  if (!BASE64_REGEX.test(str)) {
     return false
   }
 
