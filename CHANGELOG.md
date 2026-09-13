@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.41.6 (2026-09-13)
+
+### Bug Fixes
+
+- Bump mcp-core to 1.24.1 ([#1288](https://github.com/n24q02m/better-notion-mcp/pull/1288),
+  [`d9fb801`](https://github.com/n24q02m/better-notion-mcp/commit/d9fb801711c2de02abb773ecd9ce9fd0fd14035c))
+
+
 ## v2.41.5 (2026-09-12)
 
 ### Bug Fixes
