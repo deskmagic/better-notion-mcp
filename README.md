@@ -1,3 +1,5 @@
+> **ARCHIVED 2026-09-13** — This repository is no longer maintained. Use the official Notion API instead of this MCP server. Existing installations keep working but receive no updates or support.
+
 # Better Notion MCP
 
 mcp-name: io.github.n24q02m/better-notion-mcp
@@ -5,11 +7,12 @@ mcp-name: io.github.n24q02m/better-notion-mcp
 **Markdown-first Notion for AI agents -- pages, databases, blocks, and comments in one call.**
 
 <!-- Badge Row 1: Status -->
+[![Mode](https://img.shields.io/badge/mode-http_remote_oauth_%C2%B7_http_local_relay_%C2%B7_stdio_proxy-5C6BC0)](https://mcp.n24q02m.com/get-started/modes-overview/)
 [![CI](https://github.com/n24q02m/better-notion-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/n24q02m/better-notion-mcp/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/n24q02m/better-notion-mcp/graph/badge.svg?token=D7FSDVVTAN)](https://codecov.io/gh/n24q02m/better-notion-mcp)
 [![npm](https://img.shields.io/npm/v/@n24q02m/better-notion-mcp?logo=npm&logoColor=white)](https://www.npmjs.com/package/@n24q02m/better-notion-mcp)
 [![Docker](https://img.shields.io/docker/v/n24q02m/better-notion-mcp?label=docker&logo=docker&logoColor=white&sort=semver)](https://hub.docker.com/r/n24q02m/better-notion-mcp)
-[![License: MIT](https://img.shields.io/github/license/n24q02m/better-notion-mcp)](LICENSE)
+[![License: Apache-2.0](https://img.shields.io/github/license/n24q02m/better-notion-mcp)](LICENSE)
 
 <!-- Badge Row 2: Tech -->
 [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](#)
@@ -24,11 +27,15 @@ mcp-name: io.github.n24q02m/better-notion-mcp
 
 | Project | Tagline | Tag |
 |---|---|---|
+| [agent-chat-plugin](https://github.com/n24q02m/agent-chat-plugin) | Peer AI agents chat in a shared folder — no human relay, no orchestrator, wor... | Tooling |
 | [better-code-review-graph](https://github.com/n24q02m/better-code-review-graph) | Knowledge graph for token-efficient code reviews -- semantic search and call-... | MCP |
+| [better-drive](https://github.com/n24q02m/better-drive) | 2-way Google Drive sync with .driveignore filter — rclone engine, Windows tray | Tooling |
 | [better-email-mcp](https://github.com/n24q02m/better-email-mcp) | IMAP/SMTP email for AI agents -- read, send, organize folders, and manage att... | MCP |
 | [better-godot-mcp](https://github.com/n24q02m/better-godot-mcp) | Composite MCP server for Godot Engine -- 17 composite tools for AI-assisted g... | MCP |
 | [better-notion-mcp](https://github.com/n24q02m/better-notion-mcp) | Markdown-first Notion for AI agents -- pages, databases, blocks, and comments... | MCP |
+| [better-semantic-release](https://github.com/n24q02m/better-semantic-release) | Drop-in python-semantic-release fork with built-in release-safety guards (orp... | Tooling |
 | [better-telegram-mcp](https://github.com/n24q02m/better-telegram-mcp) | Telegram for AI agents -- messages, chats, media, and contacts across both bo... | MCP |
+| [better-workspace-mcp](https://github.com/n24q02m/better-workspace-mcp) | Google Workspace MCP server (Docs/Drive/Calendar/Gmail/Sheets/Slides/Tasks/Ch... | MCP |
 | [claude-plugins](https://github.com/n24q02m/claude-plugins) | Claude Code plugin marketplace for the n24q02m MCP servers -- install web sea... | Marketplace |
 | [imagine-mcp](https://github.com/n24q02m/imagine-mcp) | Image and video understanding + generation for AI agents -- across Gemini, Op... | MCP |
 | [jules-task-archiver](https://github.com/n24q02m/jules-task-archiver) | Chrome Extension for bulk operations on Jules tasks via batchexecute API -- a... | Tooling |
@@ -36,7 +43,7 @@ mcp-name: io.github.n24q02m/better-notion-mcp
 | [mnemo-mcp](https://github.com/n24q02m/mnemo-mcp) | Persistent AI memory with hybrid search and embedded sync. Open, free, unlimi... | MCP |
 | [qwen3-embed](https://github.com/n24q02m/qwen3-embed) | Lightweight Qwen3 text embedding and reranking via ONNX Runtime and GGUF | Library |
 | [skret](https://github.com/n24q02m/skret) | Secrets without the server. | CLI |
-| [tacet](https://github.com/n24q02m/tacet) | TACET: a self-distilling neuro-symbolic cascade that amortises LLM cost in kn... | Tooling |
+| [tacet](https://github.com/n24q02m/tacet) | A self-distilling neuro-symbolic cascade that amortises LLM cost across knowl... | Tooling |
 | [web-core](https://github.com/n24q02m/web-core) | Shared web infrastructure package for search, scraping, HTTP security, and st... | Library |
 | [wet-mcp](https://github.com/n24q02m/wet-mcp) | Open-source MCP server for AI agents: web search, content extraction, and lib... | MCP |
 
@@ -48,7 +55,7 @@ mcp-name: io.github.n24q02m/better-notion-mcp
 - [Features](#features)
 - [Install](#install)
 - [CLI](#cli)
-- [Hosted endpoint](#hosted-endpoint)
+- [Remote (HTTP mode)](#remote-http-mode)
 - [Smithery](#smithery)
 - [Status](#status)
 - [Documentation](#documentation)
@@ -98,6 +105,16 @@ Or run the published Docker image (stdio):
 docker run --rm -i -e NOTION_TOKEN=ntn_your_token_here n24q02m/better-notion-mcp:latest
 ```
 
+### Install matrix
+
+| Client | Install |
+|:-------|:--------|
+| Claude Code | `/plugin marketplace add n24q02m/claude-plugins` + `/plugin install better-notion-mcp@n24q02m-plugins` (stdio; prompts for `NOTION_TOKEN`), or an `mcpServers` entry in `.mcp.json` / client settings |
+| Codex CLI | `[mcp_servers.better-notion-mcp]` block in `~/.codex/config.toml` (stdio `command`/`args` or HTTP `type`/`url`) |
+| OpenCode | `mcpServers` block in `opencode.json` |
+| Cursor / Windsurf / Gemini CLI / any MCP client | `mcpServers` JSON in the client's config — same shape as the example above |
+
+Full per-client walkthroughs: [mcp.n24q02m.com/servers/better-notion-mcp/setup/](https://mcp.n24q02m.com/servers/better-notion-mcp/setup/).
 See the [Documentation](#documentation) section for per-client setup (Claude Code, Codex, Gemini CLI, Cursor, Windsurf) and HTTP/OAuth mode.
 
 ## CLI
@@ -119,9 +136,9 @@ npx --yes @n24q02m/better-notion-mcp@latest --http
 
 See [Configuration](#configuration) for the full environment-variable reference.
 
-## Hosted endpoint
+## Remote (HTTP mode)
 
-A ready-to-use remote instance is hosted at **`https://notion.n24q02m.com/mcp`** (HTTP transport, OAuth 2.1 -- no integration token to paste). Point an MCP client that supports remote HTTP servers at it:
+Deployed with the HTTP transport, the server is a remote endpoint gated by OAuth 2.1 -- no integration token to paste. Point an MCP client that supports remote HTTP servers at the host you deployed it on:
 
 ```jsonc
 // MCP client config -- remote HTTP (OAuth 2.1)
@@ -129,13 +146,13 @@ A ready-to-use remote instance is hosted at **`https://notion.n24q02m.com/mcp`**
   "mcpServers": {
     "better-notion-mcp": {
       "type": "http",
-      "url": "https://notion.n24q02m.com/mcp"
+      "url": "https://<your-host>/mcp"
     }
   }
 }
 ```
 
-On first connect the client opens Notion's OAuth consent screen; per-user access tokens are held in-process only (see [Trust Model](#trust-model)). To run your own remote instance instead, see [Self-Hosting (Remote Mode)](#self-hosting-remote-mode) and [Deploy to Cloudflare](#deploy-to-cloudflare).
+On first connect the client opens Notion's OAuth consent screen; per-user access tokens are held in-process only (see [Trust Model](#trust-model)). To stand up such an instance, see [Self-Hosting (Remote Mode)](#self-hosting-remote-mode) and [Deploy to Cloudflare](#deploy-to-cloudflare).
 
 ## Smithery
 
@@ -187,7 +204,7 @@ Eight composite Notion tools (39 actions) plus three infrastructure tools (`conf
 | `comments` | `list`, `get`, `create` | Page comments and discussion replies |
 | `content_convert` | `markdown-to-blocks`, `blocks-to-markdown` | Convert between Markdown and Notion blocks (uses a `direction` parameter) |
 | `file_uploads` | `create`, `send`, `complete`, `retrieve`, `list` | Upload files to Notion (single or multi-part) |
-| `config` | `status`, `setup_start`, `setup_reset`, `setup_complete`, `set`, `cache_clear` | Inspect and manage credential state and configuration lifecycle |
+| `config` | `status`, `setup_status`, `setup_start`, `setup_reset`, `setup_complete`, `set`, `cache_clear` | Inspect and manage credential state and configuration lifecycle |
 | `config__open_relay` | - | Open the relay configuration form in the browser and return the relay URL + credential state |
 | `help` | - | Get full documentation for any composite tool (`tool_name` parameter) |
 
@@ -211,8 +228,8 @@ Eight composite Notion tools (39 actions) plus three infrastructure tools (`conf
 | `NOTION_TOKEN` | Yes (stdio) | - | Notion integration token |
 | `TRANSPORT_MODE` / `MCP_TRANSPORT` | No | `stdio` | Set either to `http` for remote mode (or pass `--http`) |
 | `PUBLIC_URL` | No (http) | - | Server's public URL for OAuth redirect links |
-| `NOTION_OAUTH_CLIENT_ID` | Yes (http) | - | Notion Public Integration client ID |
-| `NOTION_OAUTH_CLIENT_SECRET` | Yes (http) | - | Notion Public Integration client secret |
+| `NOTION_OAUTH_CLIENT_ID` | Yes (http) | - | Notion Public Integration client ID (or `--oauth-client-id=<id>` CLI flag, which overrides the env var) |
+| `NOTION_OAUTH_CLIENT_SECRET` | Yes (http) | - | Notion Public Integration client secret (or `--oauth-client-secret=<secret>` CLI flag, which overrides the env var) |
 | `MCP_AUTH_DISABLE` | No (http) | - | Set to `1` to skip Bearer JWT verification when behind an external auth gateway |
 | `PORT` | No | `0` (OS-assigned) | Server port; set explicitly (e.g. `8080`) to bind a fixed port |
 | `HOST` | No | - | Bind address (http mode) |
@@ -241,6 +258,21 @@ docker run -p 8080:8080 \
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/n24q02m/better-notion-mcp)
 
 Run your own multi-user better-notion-mcp serverless on Cloudflare (Worker + Container + KV).
+
+### Deployment (CD-managed)
+
+Managed deployments go through CI, never by hand: the `deploy-cf` job in
+[.github/workflows/cd.yml](.github/workflows/cd.yml) runs after a release,
+checks out the released tag, builds the immutable `http-slim` image at the
+released version, pushes it to the Cloudflare managed registry, deploys, and
+gates on a canary check — a managed instance can therefore only ever run an
+exact release tag. Manual `wrangler deploy` against a managed/operated
+instance is not permitted: it breaks the release-tag ↔ live-image
+correspondence, and the next CD run would overwrite it.
+
+The job is gated by the `CF_HOSTED_ENABLED` repository Actions variable —
+currently `false`, so releases do not publish a hosted endpoint. To run your
+own instance, use the self-host steps below.
 
 **Prerequisites:** a Cloudflare account on the **Workers Paid plan** — required for Containers (the Cloudflare free tier does not include Containers) — and the `wrangler` CLI.
 
@@ -281,7 +313,7 @@ How better-notion-mcp stacks up against direct competitors in each pillar:
 | Comments | Yes (`comments`: list/get/create) | Yes | Yes | Yes |
 | Remote HTTP + OAuth 2.1 transport | Yes (per-JWT-sub multi-user) | partial (HTTP + bearer token, no OAuth) | No (stdio token only) | No (stdio token only) |
 | Self-hostable | Yes (Docker, own OAuth app) | Yes | Yes | Yes |
-| License | MIT | ? | MIT | MIT |
+| License | Apache-2.0 | ? | MIT | MIT |
 
 ## Security
 
@@ -311,4 +343,4 @@ This plugin implements **TC-NearZK** (in-memory, ephemeral). See [the trust mode
 
 ## License
 
-MIT -- See [LICENSE](LICENSE).
+Apache-2.0 -- See [LICENSE](LICENSE).

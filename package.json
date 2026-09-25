@@ -16,10 +16,10 @@
     "codex",
     "opencode"
   ],
-  "version": "2.37.0",
-  "license": "MIT",
+  "version": "2.41.6",
+  "license": "Apache-2.0",
   "type": "module",
-  "packageManager": "bun@1.2.21",
+  "packageManager": "bun@1.4.2",
   "publishConfig": {
     "access": "public"
   },
@@ -50,7 +50,7 @@
     "better-notion-mcp": "bin/cli.mjs"
   },
   "engines": {
-    "node": ">=24.18.0"
+    "node": ">=24.21.0"
   },
   "files": [
     "build/",
@@ -60,23 +60,23 @@
   ],
   "dependencies": {
     "@cloudflare/containers": "^0.3.7",
-    "@modelcontextprotocol/sdk": "^1.29.0",
-    "@n24q02m/mcp-core": "^1.18.2",
-    "@notionhq/client": "^5.23.0",
-    "zod": "^4.4.3"
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@n24q02m/mcp-core": "1.24.3",
+    "@notionhq/client": "^5.26.0",
+    "zod": "^4.6.1"
   },
   "trustedDependencies": [
     "esbuild"
   ],
   "devDependencies": {
-    "@biomejs/biome": "^2.5.3",
-    "@cloudflare/workers-types": "^5.20260708.1",
-    "@types/node": "^26.1.1",
-    "@vitest/coverage-v8": "^4.1.10",
-    "esbuild": "^0.28.1",
-    "tsx": "^4.23.0",
-    "typescript": "^5.9.3",
-    "vitest": "^4.1.10"
+    "@biomejs/biome": "^2.5.12",
+    "@cloudflare/workers-types": "^5.20260905.1",
+    "@types/node": "^26.4.1",
+    "@vitest/coverage-v8": "^5.0.0",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.0"
   },
   "description": "Better MCP server for Notion API with composite tools optimized for AI agents",
   "main": "build/src/init-server.js",

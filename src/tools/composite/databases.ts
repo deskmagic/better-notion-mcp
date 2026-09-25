@@ -485,10 +485,8 @@ async function queryDatabase(notion: Client, input: DatabasesInput): Promise<Que
   if (filter) queryParams.filter = filter
   if (input.sorts) queryParams.sorts = input.sorts
 
-  // Fetch with pagination. Push the caller-supplied limit down into page_size
-  // so a "limit: 1" call doesn't enumerate the entire data source.
-  const limit = input.limit && input.limit > 0 ? input.limit : undefined
-  const results = await autoPaginate(
+  // Fetch with pagination
+  const allResults = await autoPaginate(
     async (cursor, pageSize) => {
       const response: any = await (notion as any).dataSources.query({
         ...queryParams,
@@ -501,10 +499,12 @@ async function queryDatabase(notion: Client, input: DatabasesInput): Promise<Que
         has_more: response.has_more
       }
     },
-    { limit }
+    { limit: input.limit }
   )
 
   // Format results
+  const results = allResults
+
   const formattedResults = formatDatabaseResults(results)
 
   return {

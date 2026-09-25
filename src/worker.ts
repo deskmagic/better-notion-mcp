@@ -13,7 +13,6 @@
 // notion is KV-only: it has no docs DB and no vectors, so the d1.internal /
 // vectorize.internal handlers from the wet template are intentionally dropped.
 import { Container, ContainerProxy, type OutboundHandler } from '@cloudflare/containers'
-import { JWTIssuer } from '@n24q02m/mcp-core'
 
 // ContainerProxy must be re-exported from the Worker entrypoint: the containers
 // runtime discovers it via `ctx.exports.ContainerProxy` to route the container's
@@ -48,6 +47,9 @@ export interface Env {
   MCP_RELAY_PASSWORD: string
   NOTION_OAUTH_CLIENT_ID: string
   NOTION_OAUTH_CLIENT_SECRET: string
+  // Dehost / tombstone drill flag (W4)
+  DEHOSTED?: string
+  TOMBSTONE?: string
 }
 
 // Keys forwarded from the Worker env (wrangler vars + secrets) into the container
@@ -92,7 +94,10 @@ const kvOutbound: OutboundHandler<Env> = async (request, env) => {
   // checked before the normal key lookup so it never shadows a real KV key.
   // Security (Sentinel): restrict KV access to the app's own namespace.
   // Directly mapping untrusted paths to KV keys is a vulnerability (E.3).
-  if (key !== '__ready' && (!key.startsWith('better-notion/') || key.includes('/../') || key.includes('/..'))) {
+  if (
+    key !== '__ready' &&
+    (!key.startsWith('better-notion/') || key.includes('/../') || key.endsWith('/..') || key === '..')
+  ) {
     return new Response('forbidden: invalid KV key prefix', { status: 403 })
   }
   if (request.method === 'GET' && key === '__ready') {
@@ -138,8 +143,30 @@ function unauthenticated(request: Request): Response {
   })
 }
 
+function tombstoneResponse(): Response {
+  return new Response(
+    JSON.stringify({
+      error: 'hosted_runtime_dehosted',
+      status: 410,
+      message:
+        'The hosted Cloudflare endpoint for better-notion-mcp has been retired. The package remains active via local stdio (npx @n24q02m/better-notion-mcp / docker run -i n24q02m/better-notion-mcp) and self-hosted HTTP. See https://mcp.n24q02m.com/servers/better-notion-mcp/ for instructions.',
+      successor: 'https://mcp.n24q02m.com/servers/better-notion-mcp/'
+    }),
+    {
+      status: 410,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Dehosted-Successor': 'https://mcp.n24q02m.com/servers/better-notion-mcp/'
+      }
+    }
+  )
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
+    if (env.DEHOSTED === 'true' || env.TOMBSTONE === 'true') {
+      return tombstoneResponse()
+    }
     // Public entrypoint: ONLY routes inbound requests to the per-user container
     // DO. The kv.internal outbound handler is deliberately NOT dispatched here —
     // exposing it on the public fetch surface would let an external caller

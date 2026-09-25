@@ -289,4 +289,67 @@ describe('KV security (Sentinel)', () => {
     const res = await kvH(new Request('http://kv.internal/better-notion/../secret'), env as never)
     expect(res.status).toBe(403)
   })
+
+  it('allows legitimate keys starting with .. after a slash (false positive check)', async () => {
+    const env = fakeEnv()
+    // Mock the KV store to return null so it returns 404 instead of 403
+    const res = await kvH(new Request('http://kv.internal/better-notion/..legitimate'), env as never)
+    expect(res.status).toBe(404)
+  })
+
+  it('rejects path traversal attempts ending with /.. (403)', async () => {
+    const env = fakeEnv()
+    // Use %2F.. to prevent Request object from normalizing the URL client-side before it hits the handler
+    const res = await kvH(new Request('http://kv.internal/better-notion/foo%2F..'), env as never)
+    expect(res.status).toBe(403)
+  })
+})
+
+describe('tombstone contract (W4 dehost preparation & drill)', () => {
+  it('returns 410 Gone with non-sensitive successor message and headers before edge auth when DEHOSTED is true', async () => {
+    const { calls, env } = envWithDoSpy()
+    const dehostedEnv = { ...env, DEHOSTED: 'true' }
+
+    const res = await worker.fetch(
+      new Request('https://notion.n24q02m.com/mcp', {
+        method: 'POST'
+      }),
+      dehostedEnv as never
+    )
+
+    expect(res.status).toBe(410)
+    expect(res.headers.get('Content-Type')).toBe('application/json')
+    expect(res.headers.get('X-Dehosted-Successor')).toBe('https://mcp.n24q02m.com/servers/better-notion-mcp/')
+
+    const body = await res.json()
+    expect(body).toMatchObject({
+      error: 'hosted_runtime_dehosted',
+      status: 410,
+      successor: 'https://mcp.n24q02m.com/servers/better-notion-mcp/'
+    })
+    expect(body.message).toContain('retired')
+    expect(body.message).toContain('stdio')
+
+    // CRITICAL: 0 requests reach the Container DO
+    expect(calls).toEqual([])
+  })
+
+  it('returns 410 Gone on all routes before auth/DO for DEHOSTED and the existing TOMBSTONE drill alias', async () => {
+    const { calls, env } = envWithDoSpy()
+
+    for (const flag of ['DEHOSTED', 'TOMBSTONE'] as const) {
+      const flaggedEnv = { ...env, [flag]: 'true' }
+      for (const path of ['/authorize', '/health', '/.well-known/jwks.json', '/mcp/v1']) {
+        const res = await worker.fetch(
+          new Request(`https://notion.n24q02m.com${path}`, { method: 'GET' }),
+          flaggedEnv as never
+        )
+        expect(res.status).toBe(410)
+        expect(res.headers.get('X-Dehosted-Successor')).toBe('https://mcp.n24q02m.com/servers/better-notion-mcp/')
+      }
+    }
+
+    // CRITICAL: 0 requests reach the Container DO
+    expect(calls).toEqual([])
+  })
 })

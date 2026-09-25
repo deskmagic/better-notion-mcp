@@ -314,6 +314,10 @@ describe('fileUploads', () => {
       expect(result.file_uploads).toHaveLength(2)
       expect(result.file_uploads[0].file_upload_id).toBe('f1')
       expect(result.file_uploads[1].file_upload_id).toBe('f2')
+      expect(mockNotion.fileUploads.list).toHaveBeenCalledWith({
+        start_cursor: undefined,
+        page_size: 2
+      })
     })
 
     it('should push limit=1 down to page_size=1 and call list only once', async () => {
