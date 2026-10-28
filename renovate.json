@@ -85,6 +85,11 @@
       "matchManagers": ["mise"],
       "matchDepNames": ["python", "node", "java"],
       "enabled": false
+    },
+    {
+      "description": "Hold dependency updates for seven days before creating update PRs",
+      "matchPackageNames": ["*"],
+      "minimumReleaseAge": "7 days"
     }
   ],
   "semanticCommits": "enabled",
