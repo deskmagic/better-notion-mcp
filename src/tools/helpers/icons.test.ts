@@ -1,4 +1,6 @@
-import { unlinkSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { NotionMCPError } from './errors'
 import { formatIcon, resolveIcon } from './icons'
@@ -210,7 +212,8 @@ describe('resolveIcon', () => {
 
   it('uploads file and returns file_upload icon for upload_pending', async () => {
     // Create a temp file for the test
-    const testPath = '/tmp/test-logo-resolve-icon.png'
+    const directory = mkdtempSync(join(tmpdir(), 'resolve-icon-'))
+    const testPath = join(directory, 'logo.png')
     writeFileSync(testPath, Buffer.from('fake-png-data'))
 
     try {
@@ -233,9 +236,7 @@ describe('resolveIcon', () => {
       expect(mockNotion.fileUploads.send).toHaveBeenCalled()
       expect(mockNotion.fileUploads.complete).toHaveBeenCalled()
     } finally {
-      try {
-        unlinkSync(testPath)
-      } catch {}
+      rmSync(directory, { recursive: true, force: true })
     }
   })
 })
